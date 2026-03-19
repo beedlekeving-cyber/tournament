@@ -762,9 +762,7 @@ export default function SpecialScreen() {
   }, [showSplash]);
 
   // If the REST poll tells us the tournament is already running but our local
-  // phase is still idle, show the "waiting for match" screen. The server will
-  // push match_found when it's ready — we don't re-emit join_lobby here because
-  // the server auto-pairs all registered players at start time.
+  // phase is still idle, emit join_lobby to enter matchmaking and show the waiting screen.
   useEffect(() => {
     if (!tournamentSchedule) return;
     if (tournament.phase !== 'idle') return; // already in a live phase
@@ -774,6 +772,19 @@ export default function SpecialScreen() {
       try { return JSON.parse(localStorage.getItem('qd_registered_user') || 'null'); } catch (_) { return null; }
     })();
     if (!storedUser?.username) return; // not registered, nothing to show
+    
+    // Emit join_lobby so the server knows this player is online and waiting for a match.
+    // This is required for matchmaking — the server pairs players who have emitted join_lobby.
+    const deviceId = getDeviceId();
+    if (!socket.connected) socket.connect();
+    socket.emit('register_device', { deviceId, sessionToken: null });
+    socket.emit('join_lobby', {
+      deviceId,
+      username: storedUser.username,
+      isSpecialSession: true,
+      isTournament: true,
+    });
+    
     // Show waiting screen — server will push match_found when the round is ready
     dispatch({ type: 'TOURNAMENT_STARTED' });
   }, [tournamentSchedule, tournament.phase]);
