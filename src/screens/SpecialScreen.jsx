@@ -677,32 +677,15 @@ export default function SpecialScreen() {
     if (!socket.connected) socket.connect();
     socket.emit('register_device', { deviceId, sessionToken: null });
 
-    // Check if this device already has a registered user
-    const checkJoinStatus = async () => {  
-      try {
-        const stored = JSON.parse(localStorage.getItem('qd_registered_user') || 'null');
-        if (stored?.username) {
-          // Re-register with the backend to ensure the DB record exists
-          // (handles page reloads, cleared sessions, new deployments, etc.)
-          try {
-            await registerUser(stored.username, deviceId);
-          } catch (_) {
-            // Non-fatal — if the server is down we still show the UI
-          }
-          setHasJoined(true);
-          setUsername(stored.username);
-          // Re-register with socket so server knows we're online
-          socket.emit('join_lobby', {
-            deviceId,
-            username: stored.username,
-            isSpecialSession: true,
-            isTournament: true,
-          });
-          return;
-        }
-      } catch (_) {}
-    };
-    checkJoinStatus();
+    // Restore UI state for returning users — no API call, no socket emit.
+    // Registration only happens when the user clicks the button.
+    try {
+      const stored = JSON.parse(localStorage.getItem('qd_registered_user') || 'null');
+      if (stored?.username) {
+        setHasJoined(true);
+        setUsername(stored.username);
+      }
+    } catch (_) {}
     
     try {
       const ss = JSON.parse(localStorage.getItem('qd_special_session') || 'null');
