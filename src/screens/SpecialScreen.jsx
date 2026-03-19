@@ -642,10 +642,17 @@ export default function SpecialScreen() {
     socket.emit('register_device', { deviceId, sessionToken: null });
 
     // Check if this device already has a registered user
-    const checkJoinStatus = async () => {
+    const checkJoinStatus = async () => {  
       try {
         const stored = JSON.parse(localStorage.getItem('qd_registered_user') || 'null');
         if (stored?.username) {
+          // Re-register with the backend to ensure the DB record exists
+          // (handles page reloads, cleared sessions, new deployments, etc.)
+          try {
+            await registerUser(stored.username, deviceId);
+          } catch (_) {
+            // Non-fatal — if the server is down we still show the UI
+          }
           setHasJoined(true);
           setUsername(stored.username);
           // Re-register with socket so server knows we're online
@@ -743,7 +750,7 @@ export default function SpecialScreen() {
     return `(${Math.floor(ms / 60000)} min remaining)`;
   };
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
     const trimmed = username.trim();
     if (!trimmed) { setError('Please enter a username'); return; }
     if (trimmed.length < 3) { setError('Username must be at least 3 characters'); return; }
@@ -751,14 +758,26 @@ export default function SpecialScreen() {
     if (isDeviceEliminated()) { setError('⛔ Your device is evicted. Wait for the next tournament.'); return; }
     if (isUsernameTaken(trimmed)) { setError('Username already taken — choose another.'); return; }
     playClick();
-    // Save registration locally
-    localStorage.setItem('qd_registered_user', JSON.stringify({
-      username: trimmed,
-      sessionId: ssInfo?.sessionId || 'default',
-      registeredAt: Date.now()
-    }));
-    setRegistered(true);
-    setRegisteredUsername(trimmed);
+    setJoining(true);
+    setJoinError('');
+    try {
+      const deviceId = getDeviceId();
+      const data = await registerUser(trimmed, deviceId);
+      const confirmedUsername = data?.user?.username || trimmed;
+      // Save registration locally
+      localStorage.setItem('qd_registered_user', JSON.stringify({
+        username: confirmedUsername,
+        sessionId: ssInfo?.sessionId || 'default',
+        registeredAt: Date.now()
+      }));
+      setUsername(confirmedUsername);
+      setRegistered(true);
+      setRegisteredUsername(confirmedUsername);
+    } catch (err) {
+      setJoinError(err.message || 'Failed to register. Please try again.');
+    } finally {
+      setJoining(false);
+    }
   };
 
   const handleJoin = async () => {
@@ -1096,16 +1115,20 @@ export default function SpecialScreen() {
 
             <button
               onClick={handleRegister}
-              disabled={eliminated}
+              disabled={eliminated || joining}
               className={`w-full py-4 rounded-2xl font-bold text-lg text-white transition-all duration-300 transform hover:scale-[1.02] active:scale-95 shadow-xl
-                ${eliminated ? 'opacity-40 cursor-not-allowed' : ''}`}
-              style={!eliminated ? {
+                ${eliminated || joining ? 'opacity-40 cursor-not-allowed' : ''}`}
+              style={!eliminated && !joining ? {
                 background: 'linear-gradient(135deg, #22c55e, #10b981)',
                 boxShadow: '0 0 30px rgba(34,197,94,0.4), 0 4px 20px rgba(0,0,0,0.5)',
               } : { background: '#374151' }}
             >
-              ✅ Register Now
+              {joining ? '⏳ Registering...' : '✅ Register Now'}
             </button>
+
+            {joinError && (
+              <p className="text-red-300 text-sm mt-2 flex items-center gap-2"><span>⚠️</span>{joinError}</p>
+            )}
 
             <p className="text-gray-500 text-xs text-center mt-3">
               Register now to secure your spot. Match starts when countdown ends.
