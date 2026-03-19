@@ -474,6 +474,10 @@ export function GameProvider({ children }) {
     const onDuplicateSession = ({ message }) => {
       alert('⚠️ ' + message);
     };
+    const onRegistrationError = ({ error, code }) => {
+      // SpecialScreen handles this with inline UI; log here as a fallback
+      console.warn('[Registration] Error:', code, error);
+    };
     const onMatchOverForfeit = ({ result }) => {
       dispatch({ type: ACTIONS.MATCH_OVER, payload: { result } });
     };
@@ -501,6 +505,7 @@ export function GameProvider({ children }) {
     socket.on('security_violation',          onSecurityViolation);
     socket.on('security_ban',                onSecurityBan);
     socket.on('security_duplicate_session',  onDuplicateSession);
+    socket.on('registration_error',          onRegistrationError);
     socket.on('match_over_forfeit',          onMatchOverForfeit);
     const onSpecialSessionUpdated = (data) => {
       dispatch({ type: 'SPECIAL_SESSION_UPDATED', payload: data });
@@ -590,6 +595,7 @@ export function GameProvider({ children }) {
       socket.off('security_violation',         onSecurityViolation);
       socket.off('security_ban',               onSecurityBan);
       socket.off('security_duplicate_session', onDuplicateSession);
+      socket.off('registration_error',         onRegistrationError);
       socket.off('match_over_forfeit',         onMatchOverForfeit);
       socket.off('tournament_countdown',  onTournamentCountdown);
       socket.off('tournament_started',    onTournamentStartedFull);

@@ -690,6 +690,21 @@ export default function SpecialScreen() {
     return () => socket.off('lobby_count', onLobbyCount);
   }, []);
 
+  // Handle server-side registration errors (duplicate username, DB error, etc.)
+  useEffect(() => {
+    const onRegistrationError = ({ error, code }) => {
+      const msg = code === 'USERNAME_TAKEN'
+        ? '⛔ That username is already taken. Please choose a different one.'
+        : error || 'Registration failed. Please try again.';
+      setJoinError(msg);
+      // Also clear the "joined" state so the user can try again
+      setHasJoined(false);
+      setJoining(false);
+    };
+    socket.on('registration_error', onRegistrationError);
+    return () => socket.off('registration_error', onRegistrationError);
+  }, []);
+
   // Poll GET /api/users/count so the number stays accurate
   useEffect(() => {
     const load = () => fetchUserCount().then(setLobbyCount).catch(() => {});
