@@ -741,6 +741,31 @@ export default function SpecialScreen() {
     return () => socket.off('registration_error', onRegistrationError);
   }, []);
 
+  // When the tournament starts, re-emit join_lobby for any registered user on the page.
+  // This is the critical step: the server needs to receive join_lobby to queue the player
+  // for matchmaking. Users who registered pre-lock (handleRegister) never emitted it yet.
+  // Users who joined post-lock (handleJoin) already emitted it, but re-emitting is safe
+  // — the server deduplicates by deviceId.
+  useEffect(() => {
+    const onTournamentStarted = () => {
+      try {
+        const stored = JSON.parse(localStorage.getItem('qd_registered_user') || 'null');
+        if (!stored?.username) return; // not registered — nothing to do
+        const deviceId = getDeviceId();
+        if (!socket.connected) socket.connect();
+        socket.emit('register_device', { deviceId, sessionToken: null });
+        socket.emit('join_lobby', {
+          deviceId,
+          username: stored.username,
+          isSpecialSession: true,
+          isTournament: true,
+        });
+      } catch (_) {}
+    };
+    socket.on('tournament_started', onTournamentStarted);
+    return () => socket.off('tournament_started', onTournamentStarted);
+  }, []);
+
   // Poll GET /api/users/count so the number stays accurate
   useEffect(() => {
     const load = () => fetchUserCount().then(setLobbyCount).catch(() => {});
