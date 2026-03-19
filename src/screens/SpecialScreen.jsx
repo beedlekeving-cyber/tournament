@@ -317,17 +317,36 @@ function TournamentMatch({ questions, currentQuestionIndex, totalQuestions, oppo
     return () => socket.off('opponent_answered', handler);
   }, []);
 
-  // Listen for round_result (server tells us the outcome of this question)
+  // next_question: BOTH players answered correctly — show green reveal briefly, then
+  // the context dispatch (already wired in GameContext) advances currentQuestionIndex.
+  // We show the correct answer for 1.5 s so the player sees feedback before the reset.
   useEffect(() => {
     const handler = (data) => {
       if (!data.isTournament) return;
-      // Spec: { result, correctAnswer, myAnswer, opponentAnswer, matchOver }
+      // Show correct answer highlight + play sound
+      setCorrectAnswer(data.question?.correct ?? null);
+      setShowResult(true);
+      playCorrect();
+      setBothCorrectMsg(data.message || 'Both correct! Next question...');
+      // After 1.5 s clear the banner (the context dispatch will have already
+      // advanced currentQuestionIndex, which resets selected/showResult/timer)
+      setTimeout(() => setBothCorrectMsg(null), 1500);
+    };
+    socket.on('next_question', handler);
+    return () => socket.off('next_question', handler);
+  }, [currentQuestionIndex]);
+
+  // round_result: match is OVER (one wins, one loses, or both wrong).
+  // Just reveal the correct answer and play the appropriate sound.
+  // Parent transitions the phase via tournament_round_won / tournament_eliminated.
+  useEffect(() => {
+    const handler = (data) => {
+      if (!data.isTournament) return;
       setCorrectAnswer(data.correctAnswer ?? null);
       setShowResult(true);
-      const won = data.result === 'win' || data.myAnswer === data.correctAnswer;
-      if (won) playCorrect(); else playWrong();
-      // NOTE: question advancement is now handled by 'next_question' server event
-      // If matchOver, parent handles phase change via tournament_round_won / tournament_eliminated
+      const iWon = data.result === 'win';
+      if (iWon) playCorrect(); else playWrong();
+      // No advancement here — server sends tournament_round_won or tournament_eliminated next
     };
     socket.on('round_result', handler);
     return () => socket.off('round_result', handler);

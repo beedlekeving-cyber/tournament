@@ -377,7 +377,7 @@ function gameReducer(state, action) {
       return { ...state, tournament: { ...state.tournament, phase: 'champion' } };
 
     case ACTIONS.TOURNAMENT_NEXT_QUESTION: {
-      const { questionIndex, question } = action.payload;
+      const { questionIndex, question, totalQuestions } = action.payload;
       // Replace or append the server-provided question at the given index
       const updatedQuestions = [...state.tournament.matchQuestions];
       if (question) updatedQuestions[questionIndex] = question;
@@ -390,6 +390,8 @@ function gameReducer(state, action) {
           myAnswer: null,
           roundResult: null,
           bothCorrectFeedback: true,
+          // Update totalQuestions if server provides a revised count
+          totalQuestions: totalQuestions || state.tournament.totalQuestions,
         },
       };
     }
@@ -548,9 +550,12 @@ export function GameProvider({ children }) {
       dispatch({ type: ACTIONS.TOURNAMENT_NEXT_ROUND, payload: { round, questionsPerMatch } });
     };
 
-    // next_question: server says both players answered correctly — move to next question
-    const onNextQuestion = ({ questionIndex, question, bothCorrectCount, message }) => {
-      dispatch({ type: ACTIONS.TOURNAMENT_NEXT_QUESTION, payload: { questionIndex, question, bothCorrectCount, message } });
+    // next_question: server says both players answered correctly — move to next question.
+    // Delay the dispatch by 1.5 s so TournamentMatch can show the answer reveal first.
+    const onNextQuestion = ({ questionIndex, question, bothCorrectCount, message, totalQuestions }) => {
+      setTimeout(() => {
+        dispatch({ type: ACTIONS.TOURNAMENT_NEXT_QUESTION, payload: { questionIndex, question, bothCorrectCount, message, totalQuestions } });
+      }, 1500);
     };
 
     const onTournamentChampion = () => {
