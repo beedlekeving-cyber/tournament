@@ -2,8 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAdmin } from '../AdminContext';
 import { Plus, Pencil, Trash2, X, CheckCircle, FlaskConical, ToggleLeft, ToggleRight, AlertTriangle, Clock, Play, Square, Loader, Users, Rocket, RotateCcw } from 'lucide-react';
 import babaapete from '../../assets/babaapete.jpeg';
-
-const SOCKET_URL = 'http://localhost:4000';
+import { BASE_URL as SOCKET_URL } from '../../utils/api';
 
 const CORRECT_OPTIONS = ['A', 'B', 'C', 'D'];
 

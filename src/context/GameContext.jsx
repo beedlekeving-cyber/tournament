@@ -8,7 +8,7 @@ import {
 } from '../utils/anticheat';
 import socket from '../utils/socket';
 import { getOrCreateSessionToken } from '../utils/security';
-import { registerUser, fetchUsers } from '../utils/api';
+import { registerUser, fetchUsers, BASE_URL } from '../utils/api';
 
 // ─── Question Source (normal or special session) ────────────────────────────
 function pickQuestions(count, excludeIds, seed) {
@@ -449,7 +449,7 @@ export function GameProvider({ children }) {
     socket.on('special_session_updated',    onSpecialSessionUpdated);
 
     // Fetch initial special session state
-    fetch('http://localhost:4000/admin/special-session')
+    fetch(`${BASE_URL}/admin/special-session`)
       .then(res => res.json())
       .then(data => {
         dispatch({ type: 'SPECIAL_SESSION_UPDATED', payload: data });

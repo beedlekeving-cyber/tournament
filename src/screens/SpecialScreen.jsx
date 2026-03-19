@@ -10,6 +10,7 @@ import { BIBLE_DEMO_QUESTIONS } from '../data/bibleQuestions';
 import babaapete from '../assets/babaapete.jpeg';
 import SplashScreen from './SplashScreen';
 import socket from '../utils/socket';
+import { BASE_URL } from '../utils/api';
 
 // Demo Quiz Component - uses Bible questions for practice
 function DemoQuiz({ onClose, questions }) {
@@ -331,7 +332,7 @@ export default function SpecialScreen() {
     const checkJoinStatus = async () => {
       try {
         const deviceId = getDeviceId();
-        const response = await fetch(`http://localhost:4000/api/check-joined/${deviceId}`);
+        const response = await fetch(`${BASE_URL}/api/check-joined/${deviceId}`);
         const data = await response.json();
         if (data.hasJoined) {
           setHasJoined(true);

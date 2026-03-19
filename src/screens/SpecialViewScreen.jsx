@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Trophy, Zap, Crown, Flame, Users, Swords, Timer, Star, TrendingUp, Activity, Radio } from 'lucide-react';
 import { io } from 'socket.io-client';
 import babaapete from '../assets/babaapete.jpeg';
+import { BASE_URL as SOCKET_URL } from '../utils/api';
 
 /**
  * SpecialViewScreen — Admin / big-screen spectator view.
@@ -15,8 +16,6 @@ import babaapete from '../assets/babaapete.jpeg';
  *
  * Connects to the server socket as a "view-only" spectator.
  */
-
-const SOCKET_URL = 'http://localhost:4000';
 
 // ─── Eviction Toast (full-width dramatic banner) ─────────────────────────────
 function EvictionToast({ username, onDone }) {

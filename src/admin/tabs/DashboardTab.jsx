@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { useAdmin } from '../AdminContext';
 import { Users, BookOpen, Trophy, Settings, TrendingUp, Zap, AlertCircle, CheckCircle, RotateCcw } from 'lucide-react';
-
-const API = 'http://localhost:4000';
+import { BASE_URL as API } from '../../utils/api';
 
 export default function DashboardTab() {
   const { state, dispatch } = useAdmin();

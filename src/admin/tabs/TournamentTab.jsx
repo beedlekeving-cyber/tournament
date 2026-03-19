@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAdmin } from '../AdminContext';
 import { Play, RotateCcw, Users, Swords, Clock, RefreshCw, CalendarClock } from 'lucide-react';
-
-const API = 'http://localhost:4000';
+import { BASE_URL as API } from '../../utils/api';
 
 export default function TournamentTab() {
   const { dispatch } = useAdmin();
