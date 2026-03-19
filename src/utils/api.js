@@ -2,6 +2,22 @@
 export const BASE_URL = 'https://quizbackend-uevc.onrender.com';
 
 /**
+ * Get the number of registered players
+ * GET /api/users/count
+ * @returns {Promise<number>} total registered player count
+ */
+export async function fetchUserCount() {
+  const res = await fetch(`${BASE_URL}/api/users/count`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || `Server error: ${res.status}`);
+  }
+  const data = await res.json();
+  // Support both { count: n } and { total: n } response shapes
+  return data.count ?? data.total ?? 0;
+}
+
+/**
  * Fetch all registered users (for leaderboard)
  * GET /api/users
  * @returns {Promise<Array>} array of user objects from the server

@@ -10,7 +10,7 @@ import { BIBLE_DEMO_QUESTIONS } from '../data/bibleQuestions';
 import babaapete from '../assets/babaapete.jpeg';
 import SplashScreen from './SplashScreen';
 import socket from '../utils/socket';
-import { BASE_URL, registerUser } from '../utils/api';
+import { BASE_URL, registerUser, fetchUserCount } from '../utils/api';
 
 // Demo Quiz Component - uses Bible questions for practice
 function DemoQuiz({ onClose, questions }) {
@@ -366,6 +366,14 @@ export default function SpecialScreen() {
     const onLobbyCount = ({ count }) => setLobbyCount(count);
     socket.on('lobby_count', onLobbyCount);
     return () => socket.off('lobby_count', onLobbyCount);
+  }, []);
+
+  // Poll GET /api/users/count so the number stays accurate
+  useEffect(() => {
+    const load = () => fetchUserCount().then(setLobbyCount).catch(() => {});
+    load(); // fetch immediately on mount
+    const interval = setInterval(load, 10000); // refresh every 10 s
+    return () => clearInterval(interval);
   }, []);
 
   const streakBonus = getStreakBonus(streak);
