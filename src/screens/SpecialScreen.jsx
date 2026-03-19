@@ -10,7 +10,7 @@ import { BIBLE_DEMO_QUESTIONS } from '../data/bibleQuestions';
 import babaapete from '../assets/babaapete.jpeg';
 import SplashScreen from './SplashScreen';
 import socket from '../utils/socket';
-import { registerUser, fetchUserCount, fetchTournamentSchedule } from '../utils/api';
+import { registerUser, fetchUserCount, fetchTournamentSchedule, checkUserExists } from '../utils/api';
 
 // Demo Quiz Component - uses Bible questions for practice
 function DemoQuiz({ onClose, questions }) {
@@ -685,13 +685,25 @@ export default function SpecialScreen() {
       const stored = JSON.parse(localStorage.getItem('qd_registered_user') || 'null');
 
       if (stored?.username && stored?.sessionId === currentSessionId) {
-        // Same session — restore UI state (no API call, no socket emit).
-        // Registration only happens when the user clicks the button.
-        setUsername(stored.username);
-        setRegistered(true);
-        setRegisteredUsername(stored.username);
-        // Only restore hasJoined if the session is still active
-        if (ss?.active) setHasJoined(true);
+        // Same session — verify the user still exists in the DB before restoring UI.
+        // This handles the case where the admin deleted them from the backend.
+        checkUserExists(stored.username).then((exists) => {
+          if (!exists) {
+            // User was deleted — wipe local cache and show the registration form
+            localStorage.removeItem('qd_registered_user');
+            setUsername('');
+            setHasJoined(false);
+            setRegistered(false);
+            setRegisteredUsername('');
+          } else {
+            // User confirmed in DB — restore UI state
+            setUsername(stored.username);
+            setRegistered(true);
+            setRegisteredUsername(stored.username);
+            // Only restore hasJoined if the session is still active
+            if (ss?.active) setHasJoined(true);
+          }
+        });
       } else if (stored?.sessionId && stored.sessionId !== currentSessionId) {
         // Stale data from a previous session — clear it so the user starts fresh
         localStorage.removeItem('qd_registered_user');

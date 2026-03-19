@@ -96,6 +96,22 @@ export async function registerUser(username, deviceId) {
 }
 
 /**
+ * Check whether a username still exists in the database.
+ * GET /api/users/:username
+ * Returns true if the user exists, false if deleted or server unreachable.
+ */
+export async function checkUserExists(username) {
+  try {
+    const res = await fetch(`${BASE_URL}/api/users/${encodeURIComponent(username)}`);
+    if (res.status === 404) return false;
+    if (!res.ok) return true; // non-404 error → assume exists (fail open)
+    return true;
+  } catch (_) {
+    return true; // network error → fail open, don't clear cache
+  }
+}
+
+/**
  * Fetch all Bible questions for the tournament
  * GET /api/bible-questions
  * @returns {Promise<Array>} array of question objects from the server
