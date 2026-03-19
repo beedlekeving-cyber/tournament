@@ -677,27 +677,24 @@ export default function SpecialScreen() {
     if (!socket.connected) socket.connect();
     socket.emit('register_device', { deviceId, sessionToken: null });
 
-    // Restore UI state for returning users — no API call, no socket emit.
-    // Registration only happens when the user clicks the button.
-    try {
-      const stored = JSON.parse(localStorage.getItem('qd_registered_user') || 'null');
-      if (stored?.username) {
-        setHasJoined(true);
-        setUsername(stored.username);
-      }
-    } catch (_) {}
-    
     try {
       const ss = JSON.parse(localStorage.getItem('qd_special_session') || 'null');
       if (ss?.active) setSsInfo(ss);
-      
+
       const currentSessionId = ss?.sessionId || 'default';
-      
-      // Check if user already registered
-      const regData = JSON.parse(localStorage.getItem('qd_registered_user') || 'null');
-      if (regData?.username && regData?.sessionId === currentSessionId) {
+      const stored = JSON.parse(localStorage.getItem('qd_registered_user') || 'null');
+
+      if (stored?.username && stored?.sessionId === currentSessionId) {
+        // Same session — restore UI state (no API call, no socket emit).
+        // Registration only happens when the user clicks the button.
+        setUsername(stored.username);
         setRegistered(true);
-        setRegisteredUsername(regData.username);
+        setRegisteredUsername(stored.username);
+        // Only restore hasJoined if the session is still active
+        if (ss?.active) setHasJoined(true);
+      } else if (stored?.sessionId && stored.sessionId !== currentSessionId) {
+        // Stale data from a previous session — clear it so the user starts fresh
+        localStorage.removeItem('qd_registered_user');
       }
     } catch (_) {}
   }, []);
