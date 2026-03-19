@@ -621,6 +621,7 @@ export default function SpecialScreen() {
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState('');
   const [tournamentSchedule, setTournamentSchedule] = useState(null);
+  const [autoStartFailed, setAutoStartFailed] = useState(null); // { message, connectedCount, requiredCount }
 
   // Check if special session is active from GameContext
   const specialActive = state.specialSessionActive;
@@ -727,6 +728,25 @@ export default function SpecialScreen() {
     return () => socket.off('registration_error', onRegistrationError);
   }, []);
 
+  // Handle tournament auto-start failure (not enough connected players at scheduled time)
+  useEffect(() => {
+    const onAutoStartFailed = ({ message, connectedCount, requiredCount, reason }) => {
+      console.warn('[Tournament] Auto-start failed:', message || reason);
+      setAutoStartFailed({
+        message: message || reason || 'Not enough players connected',
+        connectedCount: connectedCount ?? 0,
+        requiredCount: requiredCount ?? 2,
+      });
+    };
+    socket.on('tournament_auto_start_failed', onAutoStartFailed);
+    // Also listen for generic tournament_error in case server uses that
+    socket.on('tournament_error', onAutoStartFailed);
+    return () => {
+      socket.off('tournament_auto_start_failed', onAutoStartFailed);
+      socket.off('tournament_error', onAutoStartFailed);
+    };
+  }, []);
+
   // Poll GET /api/users/count so the number stays accurate
   useEffect(() => {
     const load = () => fetchUserCount().then(setLobbyCount).catch(() => {});
@@ -784,6 +804,9 @@ export default function SpecialScreen() {
       isSpecialSession: true,
       isTournament: true,
     });
+    
+    // Clear any previous auto-start failure since we're now entering matchmaking
+    setAutoStartFailed(null);
     
     // Show waiting screen — server will push match_found when the round is ready
     dispatch({ type: 'TOURNAMENT_STARTED' });
@@ -995,6 +1018,31 @@ export default function SpecialScreen() {
         </div>
 
         <div className="relative z-10 w-full max-w-md text-center">
+          {/* Auto-start failure notification */}
+          {autoStartFailed && (
+            <div className="mb-6 rounded-xl p-4 text-left"
+              style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)', backdropFilter: 'blur(8px)' }}>
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center flex-shrink-0">
+                  <XCircle className="w-5 h-5 text-red-400" />
+                </div>
+                <div>
+                  <p className="text-red-300 font-bold text-sm">Tournament couldn't start</p>
+                  <p className="text-red-200/80 text-xs mt-1">
+                    {autoStartFailed.message || 'Not enough players connected when the scheduled time arrived.'}
+                  </p>
+                  <p className="text-red-200/60 text-xs mt-2">
+                    {autoStartFailed.connectedCount}/{autoStartFailed.requiredCount} players were online. 
+                    Stay on this page — it will auto-retry when enough players connect.
+                  </p>
+                </div>
+                <button onClick={() => setAutoStartFailed(null)} className="text-red-400 hover:text-red-300">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Success checkmark */}
           <div className="w-24 h-24 mx-auto mb-6 rounded-full flex items-center justify-center"
             style={{ background: 'linear-gradient(135deg, #22c55e, #10b981)', boxShadow: '0 0 40px rgba(34,197,94,0.5)' }}>
