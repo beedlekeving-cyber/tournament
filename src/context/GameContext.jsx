@@ -90,6 +90,20 @@ const initialState = {
   // Special session (Bible quiz)
   specialSessionActive: false,
 
+  // ── Tournament ──────────────────────────────────────────────────────────────
+  tournament: {
+    phase: 'idle',           // idle | countdown_warning | waiting_match | in_match | round_won | eliminated | champion
+    countdownWarning: null,  // e.g. '5 minutes to go!'
+    round: 1,
+    bibleQuestions: [],      // full bank sent by server on tournament_started
+    matchQuestions: [],      // 5 questions for current match (from match_found)
+    currentQuestionIndex: 0,
+    opponent: null,          // { username, id }
+    myAnswer: null,
+    roundResult: null,       // { correct, correctAnswer, opponentAnswer, won }
+    playerCount: 0,
+  },
+
   // UI
   loading: false,
   error: null,
@@ -115,6 +129,16 @@ const ACTIONS = {
   RESET_GAME: 'RESET_GAME',
   SET_STAGE: 'SET_STAGE',
   SET_LOADING: 'SET_LOADING',
+  // Tournament
+  TOURNAMENT_COUNTDOWN_WARNING: 'TOURNAMENT_COUNTDOWN_WARNING',
+  TOURNAMENT_STARTED: 'TOURNAMENT_STARTED_ACTION',
+  TOURNAMENT_MATCH_FOUND: 'TOURNAMENT_MATCH_FOUND',
+  TOURNAMENT_SUBMIT_ANSWER: 'TOURNAMENT_SUBMIT_ANSWER',
+  TOURNAMENT_ROUND_RESULT: 'TOURNAMENT_ROUND_RESULT',
+  TOURNAMENT_ROUND_WON: 'TOURNAMENT_ROUND_WON',
+  TOURNAMENT_ELIMINATED: 'TOURNAMENT_ELIMINATED',
+  TOURNAMENT_NEXT_ROUND: 'TOURNAMENT_NEXT_ROUND',
+  TOURNAMENT_CHAMPION: 'TOURNAMENT_CHAMPION',
 };
 
 function gameReducer(state, action) {
@@ -320,6 +344,33 @@ function gameReducer(state, action) {
     case 'SPECIAL_SESSION_UPDATED':
       return { ...state, specialSessionActive: action.payload.active };
 
+    case ACTIONS.TOURNAMENT_COUNTDOWN_WARNING:
+      return { ...state, tournament: { ...state.tournament, phase: 'countdown_warning', countdownWarning: action.payload.message } };
+
+    case ACTIONS.TOURNAMENT_STARTED:
+      return { ...state, tournamentStarted: true, tournament: { ...state.tournament, phase: 'waiting_match', bibleQuestions: action.payload.bibleQuestions || [], playerCount: action.payload.playerCount || 0, round: action.payload.round || 1, countdownWarning: null } };
+
+    case ACTIONS.TOURNAMENT_MATCH_FOUND:
+      return { ...state, tournament: { ...state.tournament, phase: 'in_match', matchQuestions: action.payload.questions || [], currentQuestionIndex: 0, opponent: action.payload.opponent, myAnswer: null, roundResult: null, round: action.payload.round || state.tournament.round } };
+
+    case ACTIONS.TOURNAMENT_SUBMIT_ANSWER:
+      return { ...state, tournament: { ...state.tournament, myAnswer: action.payload.answer } };
+
+    case ACTIONS.TOURNAMENT_ROUND_RESULT:
+      return { ...state, tournament: { ...state.tournament, roundResult: action.payload, currentQuestionIndex: state.tournament.currentQuestionIndex + 1 } };
+
+    case ACTIONS.TOURNAMENT_ROUND_WON:
+      return { ...state, tournament: { ...state.tournament, phase: 'round_won', round: action.payload.nextRound || state.tournament.round + 1 } };
+
+    case ACTIONS.TOURNAMENT_ELIMINATED:
+      return { ...state, tournament: { ...state.tournament, phase: 'eliminated' } };
+
+    case ACTIONS.TOURNAMENT_NEXT_ROUND:
+      return { ...state, tournament: { ...state.tournament, phase: 'waiting_match', currentQuestionIndex: 0, matchQuestions: [], opponent: null, myAnswer: null, roundResult: null, round: action.payload.round || state.tournament.round } };
+
+    case ACTIONS.TOURNAMENT_CHAMPION:
+      return { ...state, tournament: { ...state.tournament, phase: 'champion' } };
+
     case ACTIONS.SET_LOADING:
       return { ...state, loading: action.payload };
 
@@ -387,9 +438,7 @@ export function GameProvider({ children }) {
       }
     };
 
-    socket.on('match_found',       onMatchFound);
     socket.on('opponent_answered', onOpponentAnswered);
-    socket.on('round_result',      onRoundResult);
     socket.on('round_answers',     onRoundAnswers);
 
     // Security events from server
@@ -415,9 +464,6 @@ export function GameProvider({ children }) {
       }
       dispatch({ type: 'TOURNAMENT_WAITING', payload: data });
     };
-    const onTournamentStarted = () => {
-      dispatch({ type: 'TOURNAMENT_STARTED' });
-    };
     const onWaitingCount = ({ count }) => {
       dispatch({ type: 'WAITING_COUNT', payload: count });
     };
@@ -441,8 +487,57 @@ export function GameProvider({ children }) {
       } catch (_) {}
     };
 
+    // ── Tournament socket events ──────────────────────────────────────────────
+    const onTournamentCountdown = ({ message, secondsLeft }) => {
+      dispatch({ type: ACTIONS.TOURNAMENT_COUNTDOWN_WARNING, payload: { message: message || `Starting in ${secondsLeft}s…` } });
+    };
+
+    const onTournamentStartedFull = ({ bibleQuestions, playerCount, round }) => {
+      dispatch({ type: ACTIONS.TOURNAMENT_STARTED, payload: { bibleQuestions: bibleQuestions || [], playerCount: playerCount || 0, round: round || 1 } });
+      // Also mark global tournament started flag
+      dispatch({ type: 'TOURNAMENT_STARTED' });
+    };
+
+    const onTournamentMatchFound = ({ questions, opponent, round, isTournament }) => {
+      if (!isTournament) return; // handled by the normal match_found listener above
+      dispatch({ type: ACTIONS.TOURNAMENT_MATCH_FOUND, payload: { questions: questions || [], opponent: { username: opponent?.username, id: opponent?.id || opponent?.deviceId }, round: round || 1 } });
+    };
+
+    const onTournamentRoundResult = (payload) => {
+      dispatch({ type: ACTIONS.TOURNAMENT_ROUND_RESULT, payload });
+    };
+
+    const onTournamentRoundWon = ({ nextRound, round }) => {
+      dispatch({ type: ACTIONS.TOURNAMENT_ROUND_WON, payload: { nextRound: nextRound || round } });
+    };
+
+    const onTournamentEliminated = () => {
+      dispatch({ type: ACTIONS.TOURNAMENT_ELIMINATED });
+    };
+
+    const onTournamentNextRound = ({ round }) => {
+      dispatch({ type: ACTIONS.TOURNAMENT_NEXT_ROUND, payload: { round } });
+    };
+
+    const onTournamentChampion = () => {
+      dispatch({ type: ACTIONS.TOURNAMENT_CHAMPION });
+    };
+
+    const onYouAreChampion = () => {
+      dispatch({ type: ACTIONS.TOURNAMENT_CHAMPION });
+    };
+
+    socket.on('tournament_countdown',   onTournamentCountdown);
+    socket.on('tournament_started',     onTournamentStartedFull);
+    socket.on('match_found',            (data) => { if (data.isTournament) onTournamentMatchFound(data); else onMatchFound(data); });
+    socket.on('round_result',           (data) => { if (data.isTournament) onTournamentRoundResult(data); else onRoundResult(data); });
+    socket.on('tournament_round_won',   onTournamentRoundWon);
+    socket.on('tournament_eliminated',  onTournamentEliminated);
+    socket.on('tournament_next_round',  onTournamentNextRound);
+    socket.on('tournament_champion',    onTournamentChampion);
+    socket.on('you_are_champion',       onYouAreChampion);
+
     socket.on('tournament_waiting',          onTournamentWaiting);
-    socket.on('tournament_started',          onTournamentStarted);
     socket.on('waiting_count',              onWaitingCount);
     socket.on('tournament_reset',           onTournamentReset);
     socket.on('force_reload',               onForceReload);
@@ -458,16 +553,22 @@ export function GameProvider({ children }) {
       .catch(() => {});
 
     return () => {
-      socket.off('match_found',       onMatchFound);
+      socket.off('match_found');
       socket.off('opponent_answered', onOpponentAnswered);
-      socket.off('round_result',      onRoundResult);
+      socket.off('round_result');
       socket.off('round_answers',     onRoundAnswers);
       socket.off('security_violation',         onSecurityViolation);
       socket.off('security_ban',               onSecurityBan);
       socket.off('security_duplicate_session', onDuplicateSession);
       socket.off('match_over_forfeit',         onMatchOverForfeit);
+      socket.off('tournament_countdown',  onTournamentCountdown);
+      socket.off('tournament_started',    onTournamentStartedFull);
+      socket.off('tournament_round_won',  onTournamentRoundWon);
+      socket.off('tournament_eliminated', onTournamentEliminated);
+      socket.off('tournament_next_round', onTournamentNextRound);
+      socket.off('tournament_champion',   onTournamentChampion);
+      socket.off('you_are_champion',      onYouAreChampion);
       socket.off('tournament_waiting',         onTournamentWaiting);
-      socket.off('tournament_started',         onTournamentStarted);
       socket.off('waiting_count',             onWaitingCount);
       socket.off('tournament_reset',          onTournamentReset);
       socket.off('force_reload',              onForceReload);
@@ -628,6 +729,12 @@ export function GameProvider({ children }) {
     }
   }, [state.username, state.wins, state.totalMatchTime]);
 
+  const submitTournamentAnswer = useCallback((answer, questionId) => {
+    const deviceId = getDeviceId();
+    dispatch({ type: ACTIONS.TOURNAMENT_SUBMIT_ANSWER, payload: { answer } });
+    socket.emit('submit_answer', { answer, questionId, deviceId, isTournament: true });
+  }, []);
+
   const resetGame = useCallback(() => {
     // Read username from current state via the reducer payload
     dispatch({ type: ACTIONS.RESET_GAME });
@@ -644,6 +751,7 @@ export function GameProvider({ children }) {
       joinLobby,
       simulateOpponentAnswer,
       submitAnswer,
+      submitTournamentAnswer,
       evaluateRound,
       enterFinal,
       submitFinalAnswer,

@@ -96,6 +96,22 @@ export async function registerUser(username, deviceId) {
 }
 
 /**
+ * Fetch all Bible questions for the tournament
+ * GET /api/bible-questions
+ * @returns {Promise<Array>} array of question objects from the server
+ */
+export async function fetchBibleQuestions() {
+  const res = await fetch(`${BASE_URL}/api/bible-questions`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || `Server error: ${res.status}`);
+  }
+  const data = await res.json();
+  // Support both a plain array or { questions: [] } wrapper
+  return Array.isArray(data) ? data : data.questions ?? [];
+}
+
+/**
  * Admin login
  * POST /admin/login
  * @param {string} email

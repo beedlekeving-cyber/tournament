@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useGame } from '../context/GameContext';
-import { Eye, ShieldCheck, Star, Users, Gamepad2, X, CheckCircle2, XCircle, ArrowRight, RotateCcw, Clock, Trophy } from 'lucide-react';
+import { Eye, ShieldCheck, Star, Users, Gamepad2, X, CheckCircle2, XCircle, ArrowRight, RotateCcw, Clock, Trophy, Swords, Zap, Crown } from 'lucide-react';
 import { playClick, playCorrect, playWrong, playTick, playUrgentTick, playWin } from '../utils/sounds';
 import {
   isUsernameTaken, isDeviceEliminated, getEliminationInfo,
@@ -272,8 +272,279 @@ function DemoQuiz({ onClose, questions }) {
   );
 }
 
+// ── Tournament: Live Match Component ─────────────────────────────────────────
+function TournamentMatch({ questions, opponent, round, username, onAnswered }) {
+  const [currentQ, setCurrentQ] = useState(0);
+  const [selected, setSelected] = useState(null);
+  const [showResult, setShowResult] = useState(false);
+  const [timer, setTimer] = useState(9);
+  const [opponentAnswered, setOpponentAnswered] = useState(false);
+
+  const q = questions[currentQ];
+
+  // Reset per question
+  useEffect(() => {
+    setSelected(null);
+    setShowResult(false);
+    setTimer(9);
+    setOpponentAnswered(false);
+  }, [currentQ]);
+
+  // Timer countdown
+  useEffect(() => {
+    if (showResult) return;
+    if (timer <= 0) { handleAnswer(null); return; }
+    if (timer <= 3) playUrgentTick(); else playTick();
+    const t = setTimeout(() => setTimer(t => t - 1), 1000);
+    return () => clearTimeout(t);
+  }, [timer, showResult]);
+
+  // Listen for opponent answered signal
+  useEffect(() => {
+    const handler = () => setOpponentAnswered(true);
+    socket.on('opponent_answered', handler);
+    return () => socket.off('opponent_answered', handler);
+  }, []);
+
+  // Listen for round_result (server tells us the outcome of this question)
+  useEffect(() => {
+    const handler = (data) => {
+      if (!data.isTournament) return;
+      setShowResult(true);
+      if (data.correct) playCorrect(); else playWrong();
+      // Advance to next question after 2.5s
+      setTimeout(() => {
+        const next = currentQ + 1;
+        if (next < questions.length) {
+          setCurrentQ(next);
+        }
+        // If no more questions, parent handles the phase change via socket events
+      }, 2500);
+    };
+    socket.on('round_result', handler);
+    return () => socket.off('round_result', handler);
+  }, [currentQ, questions.length]);
+
+  const handleAnswer = (optionKey) => {
+    if (showResult || selected !== null) return;
+    playClick();
+    setSelected(optionKey);
+    onAnswered(optionKey, q?.id);
+    // Result will come from server via round_result
+  };
+
+  if (!q) return null;
+
+  // Build options array from question shape
+  const options = q.options
+    ? (typeof q.options === 'object' && !Array.isArray(q.options)
+        ? Object.entries(q.options)  // { A: '...', B: '...', ... }
+        : q.options.map((opt, i) => [String.fromCharCode(65 + i), opt]))
+    : [];
+
+  const correctKey = q.correct;
+
+  return (
+    <div className="fixed inset-0 z-40 flex flex-col items-center justify-center p-4"
+      style={{ background: 'linear-gradient(160deg, rgba(10,5,30,0.97) 0%, rgba(50,5,40,0.97) 100%)' }}>
+      <div className="w-full max-w-md">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl"
+            style={{ background: 'rgba(236,72,153,0.2)', border: '1px solid rgba(236,72,153,0.4)' }}>
+            <Swords className="w-4 h-4 text-pink-400" />
+            <span className="text-pink-300 font-bold text-sm">Round {round}</span>
+          </div>
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl"
+            style={{ background: 'rgba(167,139,250,0.2)', border: '1px solid rgba(167,139,250,0.4)' }}>
+            <span className="text-purple-300 text-sm font-semibold">vs <span className="font-black text-white">{opponent?.username ?? 'Opponent'}</span></span>
+          </div>
+        </div>
+
+        {/* Progress + Timer */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex gap-1.5">
+            {questions.map((_, i) => (
+              <div key={i} className={`h-1.5 rounded-full flex-1 ${
+                i < currentQ ? 'bg-green-500' : i === currentQ ? 'bg-amber-500' : 'bg-gray-700'
+              }`} style={{ minWidth: '24px' }} />
+            ))}
+          </div>
+          <div className={`flex items-center gap-2 px-3 py-1 rounded-lg ml-3 ${
+            timer <= 3 ? 'bg-red-500/20 text-red-400 animate-pulse' : 'bg-amber-500/20 text-amber-400'
+          }`}>
+            <Clock className="w-4 h-4" />
+            <span className="font-mono font-black text-lg">{timer}s</span>
+          </div>
+        </div>
+
+        {/* Opponent status */}
+        {opponentAnswered && (
+          <div className="text-center mb-3">
+            <span className="text-xs font-bold px-3 py-1 rounded-full"
+              style={{ background: 'rgba(167,139,250,0.2)', color: '#a78bfa' }}>
+              ✓ {opponent?.username ?? 'Opponent'} answered
+            </span>
+          </div>
+        )}
+
+        {/* Question Card */}
+        <div className="rounded-3xl p-6 mb-4"
+          style={{ background: 'rgba(10,5,30,0.9)', border: '1px solid rgba(251,191,36,0.25)', backdropFilter: 'blur(20px)' }}>
+          <p className="text-amber-400 text-xs uppercase tracking-wider mb-2">Question {currentQ + 1} of {questions.length}</p>
+          <h2 className="text-lg font-bold text-white leading-relaxed">{q.question}</h2>
+        </div>
+
+        {/* Options */}
+        <div className="space-y-3">
+          {options.map(([key, text]) => {
+            let style = { background: 'rgba(255,255,255,0.07)', border: '2px solid transparent' };
+            if (showResult) {
+              if (key === correctKey) style = { background: 'rgba(34,197,94,0.2)', border: '2px solid #22c55e' };
+              else if (key === selected) style = { background: 'rgba(239,68,68,0.2)', border: '2px solid #ef4444' };
+            } else if (key === selected) {
+              style = { background: 'rgba(251,191,36,0.2)', border: '2px solid #fbbf24' };
+            }
+            return (
+              <button key={key}
+                onClick={() => handleAnswer(key)}
+                disabled={!!selected || showResult}
+                className="w-full p-4 rounded-xl text-left transition-all"
+                style={style}>
+                <div className="flex items-center gap-3">
+                  <span className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm"
+                    style={{ background: 'rgba(255,255,255,0.1)', color: 'white' }}>{key}</span>
+                  <span className="text-white font-medium flex-1">{text}</span>
+                  {showResult && key === correctKey && <CheckCircle2 className="w-5 h-5 text-green-400" />}
+                  {showResult && key === selected && key !== correctKey && <XCircle className="w-5 h-5 text-red-400" />}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Tournament: Countdown Warning Overlay ─────────────────────────────────────
+function TournamentCountdownBanner({ message }) {
+  return (
+    <div className="fixed inset-x-0 top-0 z-50 flex justify-center p-4 pt-6 pointer-events-none">
+      <div className="flex items-center gap-3 px-6 py-3 rounded-2xl shadow-2xl animate-bounce"
+        style={{ background: 'linear-gradient(135deg, #d97706, #ec4899)', boxShadow: '0 0 40px rgba(217,119,6,0.6)' }}>
+        <Zap className="w-5 h-5 text-white" />
+        <span className="text-white font-black text-sm">{message}</span>
+        <Zap className="w-5 h-5 text-white" />
+      </div>
+    </div>
+  );
+}
+
+// ── Tournament: Waiting for Match ─────────────────────────────────────────────
+function TournamentWaitingMatch({ round }) {
+  return (
+    <div className="fixed inset-0 z-40 flex flex-col items-center justify-center p-4"
+      style={{ background: 'linear-gradient(160deg, rgba(10,5,30,0.97) 0%, rgba(30,5,60,0.97) 100%)' }}>
+      <div className="text-center">
+        <div className="w-24 h-24 mx-auto mb-6 rounded-full flex items-center justify-center animate-pulse"
+          style={{ background: 'linear-gradient(135deg, #d97706, #a78bfa)', boxShadow: '0 0 50px rgba(217,119,6,0.5)' }}>
+          <Swords className="w-12 h-12 text-white" />
+        </div>
+        <h2 className="text-3xl font-black text-white mb-2">Round {round}</h2>
+        <p className="text-amber-400 font-semibold text-lg mb-2">Finding your opponent…</p>
+        <p className="text-gray-400 text-sm">You will be matched automatically</p>
+        <div className="flex justify-center gap-2 mt-6">
+          {[0,1,2].map(i => (
+            <div key={i} className="w-3 h-3 rounded-full bg-amber-400 animate-bounce"
+              style={{ animationDelay: `${i * 0.15}s` }} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Tournament: Round Won overlay ─────────────────────────────────────────────
+function TournamentRoundWon({ round }) {
+  return (
+    <div className="fixed inset-0 z-40 flex flex-col items-center justify-center p-4"
+      style={{ background: 'linear-gradient(160deg, rgba(5,20,10,0.97) 0%, rgba(10,40,20,0.97) 100%)' }}>
+      <div className="text-center">
+        <div className="w-28 h-28 mx-auto mb-6 rounded-full flex items-center justify-center"
+          style={{ background: 'linear-gradient(135deg, #22c55e, #10b981)', boxShadow: '0 0 60px rgba(34,197,94,0.6)' }}>
+          <CheckCircle2 className="w-14 h-14 text-white" />
+        </div>
+        <h2 className="text-4xl font-black text-green-400 mb-2">You Won!</h2>
+        <p className="text-white text-lg mb-6">Advancing to Round {round}…</p>
+        <div className="flex justify-center gap-2">
+          {[0,1,2].map(i => (
+            <div key={i} className="w-3 h-3 rounded-full bg-green-400 animate-bounce"
+              style={{ animationDelay: `${i * 0.15}s` }} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Tournament: Eliminated overlay ────────────────────────────────────────────
+function TournamentEliminated({ username }) {
+  return (
+    <div className="fixed inset-0 z-40 flex flex-col items-center justify-center p-4"
+      style={{ background: 'linear-gradient(160deg, rgba(30,5,5,0.97) 0%, rgba(60,10,10,0.97) 100%)' }}>
+      <div className="text-center w-full max-w-sm">
+        <div className="w-28 h-28 mx-auto mb-6 rounded-full flex items-center justify-center"
+          style={{ background: 'linear-gradient(135deg, #ef4444, #dc2626)', boxShadow: '0 0 60px rgba(239,68,68,0.6)' }}>
+          <XCircle className="w-14 h-14 text-white" />
+        </div>
+        <h2 className="text-4xl font-black text-red-400 mb-2">Eliminated!</h2>
+        <p className="text-gray-300 mb-2">Better luck next time, <span className="text-white font-bold">{username}</span>!</p>
+        <p className="text-gray-500 text-sm mb-8">You answered incorrectly and have been evicted from the tournament.</p>
+        <div className="rounded-2xl p-4"
+          style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)' }}>
+          <p className="text-red-300 text-sm">🎉 Thanks for participating! Watch the leaderboard for the final champion.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Tournament: Champion overlay ──────────────────────────────────────────────
+function TournamentChampion({ username }) {
+  useEffect(() => { playWin(); }, []);
+  return (
+    <div className="fixed inset-0 z-40 flex flex-col items-center justify-center p-4"
+      style={{ background: 'linear-gradient(160deg, rgba(10,8,0,0.97) 0%, rgba(40,20,0,0.97) 100%)' }}>
+      <div className="text-center w-full max-w-sm">
+        {/* Glow ring */}
+        <div className="relative inline-flex items-center justify-center mb-6">
+          <div className="absolute w-36 h-36 rounded-full animate-ping"
+            style={{ background: 'rgba(251,191,36,0.2)' }} />
+          <div className="w-28 h-28 rounded-full flex items-center justify-center"
+            style={{ background: 'linear-gradient(135deg, #f59e0b, #fbbf24)', boxShadow: '0 0 80px rgba(251,191,36,0.8)' }}>
+            <Crown className="w-14 h-14 text-white" />
+          </div>
+        </div>
+        <h2 className="text-5xl font-black mb-3"
+          style={{ background: 'linear-gradient(135deg,#fbbf24,#fde68a,#f59e0b)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text', filter:'drop-shadow(0 0 20px rgba(251,191,36,0.8))' }}>
+          CHAMPION!
+        </h2>
+        <p className="text-amber-200 text-xl font-bold mb-2">🏆 Congratulations, {username}!</p>
+        <p className="text-gray-400 mb-8">You are the last player standing!</p>
+        <div className="rounded-2xl p-5"
+          style={{ background: 'linear-gradient(135deg, rgba(251,191,36,0.15), rgba(217,119,6,0.15))', border: '1px solid rgba(251,191,36,0.4)' }}>
+          <p className="text-amber-300 font-bold text-lg mb-1">💰 Grand Prize: ₦20,000</p>
+          <p className="text-gray-300 text-sm">Contact the tournament admin to claim your prize.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function SpecialScreen() {
-  const { joinLobby, state } = useGame();
+  const { joinLobby, state, submitTournamentAnswer } = useGame();
+  const tournament = state.tournament;
   const [username, setUsername] = useState('');
   const [error, setError] = useState('');
   const [focused, setFocused] = useState(false);
@@ -473,6 +744,48 @@ export default function SpecialScreen() {
   const need = Math.max(0, 10 - lobbyCount);
 
   if (showSplash) return <SplashScreen onDone={() => setShowSplash(false)} />;
+
+  // ─── TOURNAMENT LIVE PHASES ───────────────────────────────────────────────
+  // Champion
+  if (tournament.phase === 'champion') {
+    return <TournamentChampion username={username || state.username} />;
+  }
+
+  // Eliminated
+  if (tournament.phase === 'eliminated') {
+    return <TournamentEliminated username={username || state.username} />;
+  }
+
+  // Active match
+  if (tournament.phase === 'in_match' && tournament.matchQuestions.length > 0) {
+    return (
+      <>
+        {tournament.countdownWarning && <TournamentCountdownBanner message={tournament.countdownWarning} />}
+        <TournamentMatch
+          questions={tournament.matchQuestions}
+          opponent={tournament.opponent}
+          round={tournament.round}
+          username={username || state.username}
+          onAnswered={(answer, questionId) => submitTournamentAnswer(answer, questionId)}
+        />
+      </>
+    );
+  }
+
+  // Round won — waiting for next round
+  if (tournament.phase === 'round_won') {
+    return <TournamentRoundWon round={tournament.round} />;
+  }
+
+  // Waiting to be paired
+  if (tournament.phase === 'waiting_match') {
+    return (
+      <>
+        {tournament.countdownWarning && <TournamentCountdownBanner message={tournament.countdownWarning} />}
+        <TournamentWaitingMatch round={tournament.round} />
+      </>
+    );
+  }
 
   // ─── SPECIAL SESSION NOT ACTIVE ───
   if (!specialActive) {
@@ -1133,6 +1446,11 @@ export default function SpecialScreen() {
 
       {/* Demo Quiz */}
       {showDemo && <DemoQuiz onClose={() => setShowDemo(false)} questions={BIBLE_DEMO_QUESTIONS} />}
+
+      {/* Tournament countdown warning banner */}
+      {tournament.countdownWarning && tournament.phase === 'countdown_warning' && (
+        <TournamentCountdownBanner message={tournament.countdownWarning} />
+      )}
     </div>
   );
 }
