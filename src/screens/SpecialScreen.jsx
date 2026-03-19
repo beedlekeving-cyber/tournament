@@ -483,7 +483,7 @@ function TournamentCountdownBanner({ message }) {
 }
 
 // ── Tournament: Waiting for Match ─────────────────────────────────────────────
-function TournamentWaitingMatch({ round }) {
+function TournamentWaitingMatch({ round, activeCount, registeredCount }) {
   return (
     <div className="fixed inset-0 z-40 flex flex-col items-center justify-center p-4"
       style={{ background: 'linear-gradient(160deg, rgba(10,5,30,0.97) 0%, rgba(30,5,60,0.97) 100%)' }}>
@@ -495,6 +495,22 @@ function TournamentWaitingMatch({ round }) {
         <h2 className="text-3xl font-black text-white mb-2">Round {round}</h2>
         <p className="text-amber-400 font-semibold text-lg mb-2">Finding your opponent…</p>
         <p className="text-gray-400 text-sm">You will be matched automatically</p>
+        {(activeCount > 0 || registeredCount > 0) && (
+          <div className="flex items-center justify-center gap-3 mt-4">
+            {activeCount > 0 && (
+              <span className="text-xs font-bold px-3 py-1 rounded-full"
+                style={{ background: 'rgba(34,197,94,0.15)', color: '#4ade80', border: '1px solid rgba(34,197,94,0.3)' }}>
+                ⚡ {activeCount} online
+              </span>
+            )}
+            {registeredCount > 0 && (
+              <span className="text-xs font-bold px-3 py-1 rounded-full"
+                style={{ background: 'rgba(167,139,250,0.15)', color: '#a78bfa', border: '1px solid rgba(167,139,250,0.3)' }}>
+                👥 {registeredCount} registered
+              </span>
+            )}
+          </div>
+        )}
         <div className="flex justify-center gap-2 mt-6">
           {[0,1,2].map(i => (
             <div key={i} className="w-3 h-3 rounded-full bg-amber-400 animate-bounce"
@@ -596,6 +612,7 @@ export default function SpecialScreen() {
   const [ssInfo, setSsInfo] = useState(null);
   const [showSplash, setShowSplash] = useState(true);
   const [lobbyCount, setLobbyCount] = useState(0);
+  const [activeCount, setActiveCount] = useState(0);
   const [now, setNow] = useState(Date.now());
   const [showDemo, setShowDemo] = useState(false);
   const [registered, setRegistered] = useState(false);
@@ -705,8 +722,16 @@ export default function SpecialScreen() {
   // Listen for lobby count from socket
   useEffect(() => {
     const onLobbyCount = ({ count }) => setLobbyCount(count);
-    socket.on('lobby_count', onLobbyCount);
-    return () => socket.off('lobby_count', onLobbyCount);
+    const onActiveCount = ({ count, registered }) => {
+      setActiveCount(count);
+      if (registered != null) setLobbyCount(registered);
+    };
+    socket.on('lobby_count',  onLobbyCount);
+    socket.on('active_count', onActiveCount);
+    return () => {
+      socket.off('lobby_count',  onLobbyCount);
+      socket.off('active_count', onActiveCount);
+    };
   }, []);
 
   // Handle server-side registration errors (duplicate username, DB error, etc.)
@@ -903,7 +928,7 @@ export default function SpecialScreen() {
     return (
       <>
         {tournament.countdownWarning && <TournamentCountdownBanner message={tournament.countdownWarning} />}
-        <TournamentWaitingMatch round={tournament.round} />
+        <TournamentWaitingMatch round={tournament.round} activeCount={activeCount} registeredCount={lobbyCount} />
       </>
     );
   }

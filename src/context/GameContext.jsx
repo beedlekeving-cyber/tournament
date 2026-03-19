@@ -416,7 +416,11 @@ export function GameProvider({ children }) {
     // Connect socket immediately so we can receive reset events
     if (!socket.connected) socket.connect();
 
-    const onMatchFound = ({ matchId, seed, opponent, questions }) => {
+    const onMatchFound = ({ matchId, seed, opponent, you, questions }) => {
+      // New payload shape: { you: { username, deviceId }, opponent: { username, deviceId } }
+      // Fall back to flat opponent field for backwards compatibility
+      const resolvedOpponent = opponent ?? you; // 'you' only present in some server versions
+      const opponentPlayer = resolvedOpponent ?? {};
       // Store server-provided questions if any (special session)
       if (questions) {
         try { localStorage.setItem('qd_server_questions_' + matchId, JSON.stringify(questions)); } catch (_) {}
@@ -428,7 +432,7 @@ export function GameProvider({ children }) {
       dispatch({
         type: ACTIONS.MATCH_FOUND,
         payload: {
-          opponent: { username: opponent.username, id: opponent.deviceId },
+          opponent: { username: opponentPlayer.username, id: opponentPlayer.deviceId || opponentPlayer.id },
           matchId,
           matchSeed: seed,
         },
@@ -491,7 +495,7 @@ export function GameProvider({ children }) {
         clearTimeout(lobbyTimeoutRef.current);
         lobbyTimeoutRef.current = null;
       }
-      dispatch({ type: 'TOURNAMENT_WAITING', payload: data });
+      dispatch({ type: 'TOURNAMENT_WAITING', payload: { ...data, activeCount: data.activeCount ?? 0 } });
     };
     const onWaitingCount = ({ count }) => {
       dispatch({ type: 'WAITING_COUNT', payload: count });
@@ -529,9 +533,10 @@ export function GameProvider({ children }) {
       dispatch({ type: 'TOURNAMENT_STARTED' });
     };
 
-    const onTournamentMatchFound = ({ matchId, questions, opponent, round, totalQuestions, isTournament }) => {
+    const onTournamentMatchFound = ({ matchId, questions, opponent, you, round, totalQuestions, isTournament }) => {
       if (!isTournament) return; // handled by the normal match_found listener above
-      dispatch({ type: ACTIONS.TOURNAMENT_MATCH_FOUND, payload: { matchId, questions: questions || [], opponent: { username: opponent?.username, id: opponent?.id || opponent?.deviceId }, round: round || 1, totalQuestions: totalQuestions || questions?.length || 5 } });
+      const opp = opponent ?? {};
+      dispatch({ type: ACTIONS.TOURNAMENT_MATCH_FOUND, payload: { matchId, questions: questions || [], opponent: { username: opp.username, id: opp.id || opp.deviceId }, round: round || 1, totalQuestions: totalQuestions || questions?.length || 5 } });
     };
 
     const onTournamentRoundResult = ({ result, questionIndex, correctAnswer, myAnswer, opponentAnswer, matchOver }) => {
