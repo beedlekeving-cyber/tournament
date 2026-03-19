@@ -31,6 +31,20 @@ export function adminAuthHeaders(extra = {}) {
 }
 
 /**
+ * Fetch the tournament schedule from the backend
+ * GET /tournament/schedule
+ * @returns {Promise<object>} e.g. { scheduledDate, tournamentStarted, registrationOpen }
+ */
+export async function fetchTournamentSchedule() {
+  const res = await fetch(`${BASE_URL}/tournament/schedule`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || `Server error: ${res.status}`);
+  }
+  return res.json();
+}
+
+/**
  * Get the number of registered players
  * GET /api/users/count
  * @returns {Promise<number>} total registered player count

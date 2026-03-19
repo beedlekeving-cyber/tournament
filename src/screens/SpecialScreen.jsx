@@ -10,7 +10,7 @@ import { BIBLE_DEMO_QUESTIONS } from '../data/bibleQuestions';
 import babaapete from '../assets/babaapete.jpeg';
 import SplashScreen from './SplashScreen';
 import socket from '../utils/socket';
-import { BASE_URL, registerUser, fetchUserCount } from '../utils/api';
+import { BASE_URL, registerUser, fetchUserCount, fetchTournamentSchedule } from '../utils/api';
 
 // Demo Quiz Component - uses Bible questions for practice
 function DemoQuiz({ onClose, questions }) {
@@ -291,6 +291,7 @@ export default function SpecialScreen() {
   const [hasJoined, setHasJoined] = useState(false);
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState('');
+  const [tournamentSchedule, setTournamentSchedule] = useState(null);
 
   // Check if special session is active from GameContext
   const specialActive = state.specialSessionActive;
@@ -301,11 +302,19 @@ export default function SpecialScreen() {
     return () => clearInterval(t);
   }, []);
 
-  const scheduledStart = ssInfo?.scheduledStart ? new Date(ssInfo.scheduledStart).getTime() : null;
+  // Backend schedule takes priority; fall back to locally cached ssInfo
+  const rawScheduledDate = tournamentSchedule?.scheduledDate ?? ssInfo?.scheduledStart ?? null;
+  const scheduledStart = rawScheduledDate ? new Date(rawScheduledDate).getTime() : null;
+  // Use server-provided ms-until-start (avoids client clock drift) when fresh, else compute locally
+  const msLeft = tournamentSchedule?.timeUntilStart != null
+    ? Math.max(0, tournamentSchedule.timeUntilStart - (now - (tournamentSchedule._fetchedAt ?? now)))
+    : scheduledStart ? Math.max(0, scheduledStart - now) : 0;
+  const registrationOpen  = tournamentSchedule?.registrationOpen  ?? false;
+  const isTimeToStart     = tournamentSchedule?.isTimeToStart      ?? false;
+  const tournamentStarted = tournamentSchedule?.tournamentStarted  ?? false;
   const isLocked = scheduledStart && now < scheduledStart;
-  const msLeft = scheduledStart ? Math.max(0, scheduledStart - now) : 0;
-  const oneHourBeforeStart = scheduledStart ? scheduledStart - 3600000 : 0; // 1 hour before
-  const demoDisabled = scheduledStart && now >= oneHourBeforeStart; // Disable demo 1 hour before start
+  const oneHourBeforeStart = scheduledStart ? scheduledStart - 3600000 : 0;
+  const demoDisabled = scheduledStart && now >= oneHourBeforeStart;
 
   const formatCountdown = (ms) => {
     const totalSec = Math.floor(ms / 1000);
@@ -376,8 +385,18 @@ export default function SpecialScreen() {
   // Poll GET /api/users/count so the number stays accurate
   useEffect(() => {
     const load = () => fetchUserCount().then(setLobbyCount).catch(() => {});
-    load(); // fetch immediately on mount
-    const interval = setInterval(load, 10000); // refresh every 10 s
+    load();
+    const interval = setInterval(load, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Fetch tournament schedule from backend and keep it fresh
+  useEffect(() => {
+    const load = () => fetchTournamentSchedule()
+      .then(data => setTournamentSchedule({ ...data, _fetchedAt: Date.now() }))
+      .catch(() => {});
+    load();
+    const interval = setInterval(load, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -881,29 +900,73 @@ export default function SpecialScreen() {
 
               {scheduledStart && (
                 <div className="bg-blue-500/20 border-2 border-blue-400/50 rounded-xl p-5 mb-4">
-                  <Clock className="w-12 h-12 text-blue-400 mx-auto mb-3" />
-                  <h4 className="text-lg font-bold text-white mb-2">📅 Tournament Schedule</h4>
-                  <p className="text-blue-300 font-semibold text-lg mb-1">
-                    {new Date(scheduledStart).toLocaleDateString('en-US', { 
-                      weekday: 'long', 
-                      year: 'numeric', 
-                      month: 'long', 
-                      day: 'numeric' 
-                    })}
+                  <Clock className="w-10 h-10 text-blue-400 mx-auto mb-3" />
+                  <h4 className="text-lg font-bold text-white mb-1">📅 Tournament Starts</h4>
+                  <p className="text-blue-300 font-semibold text-sm mb-3">
+                    {tournamentSchedule?.scheduledDateFormatted
+                      ?? new Date(scheduledStart).toLocaleString('en-US', {
+                          weekday: 'long', year: 'numeric', month: 'long',
+                          day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true,
+                        })}
                   </p>
-                  <p className="text-blue-300 font-semibold text-xl">
-                    {new Date(scheduledStart).toLocaleTimeString('en-US', { 
-                      hour: '2-digit', 
-                      minute: '2-digit',
-                      hour12: true 
-                    })}
-                  </p>
-                  {isLocked && (
-                    <div className="mt-3 pt-3 border-t border-blue-400/30">
-                      <p className="text-white/80 text-sm mb-1">Starts in:</p>
-                      <p className="text-amber-400 font-bold text-2xl">{formatCountdown(msLeft)}</p>
+
+                  {/* Status badges */}
+                  <div className="flex justify-center gap-2 mb-4 flex-wrap">
+                    {registrationOpen && !tournamentStarted && (
+                      <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-500/20 border border-amber-400/40 text-amber-300">
+                        📝 Registration Open
+                      </span>
+                    )}
+                    {tournamentStarted && (
+                      <span className="px-3 py-1 rounded-full text-xs font-bold bg-green-500/20 border border-green-400/40 text-green-300">
+                        ● Live
+                      </span>
+                    )}
+                    {tournamentSchedule?.registeredCount != null && (
+                      <span className="px-3 py-1 rounded-full text-xs font-bold bg-purple-500/20 border border-purple-400/40 text-purple-300">
+                        👥 {tournamentSchedule.registeredCount} registered
+                      </span>
+                    )}
+                  </div>
+
+                  {tournamentStarted || isTimeToStart ? (
+                    <div className="bg-green-500/20 border border-green-400/40 rounded-xl px-4 py-3">
+                      <p className="text-green-400 font-black text-lg">🚀 Tournament is Live!</p>
                     </div>
-                  )}
+                  ) : msLeft > 0 ? (
+                    <>
+                      <p className="text-white/60 text-xs uppercase tracking-widest mb-2">Starts in</p>
+                      {(() => {
+                        const totalSec = Math.floor(msLeft / 1000);
+                        const dd = Math.floor(totalSec / 86400);
+                        const hh = Math.floor((totalSec % 86400) / 3600);
+                        const mm = Math.floor((totalSec % 3600) / 60);
+                        const ss = totalSec % 60;
+                        const parts = dd > 0
+                          ? [{ v: dd, l: 'Days' }, { v: hh, l: 'Hours' }, { v: mm, l: 'Min' }, { v: ss, l: 'Sec' }]
+                          : [{ v: hh, l: 'Hours' }, { v: mm, l: 'Min' }, { v: ss, l: 'Sec' }];
+                        return (
+                          <div className="flex justify-center gap-2">
+                            {parts.map(({ v, l }, i) => (
+                              <div key={l} className="flex items-center gap-2">
+                                <div className="flex flex-col items-center">
+                                  <div className="bg-amber-500/20 border border-amber-400/40 rounded-xl px-3 py-2 min-w-[52px]">
+                                    <span className="text-amber-400 font-black text-2xl tabular-nums">
+                                      {String(v).padStart(2, '0')}
+                                    </span>
+                                  </div>
+                                  <span className="text-white/40 text-xs mt-1">{l}</span>
+                                </div>
+                                {i < parts.length - 1 && (
+                                  <span className="text-amber-400 font-black text-2xl mb-4">:</span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
+                    </>
+                  ) : null}
                 </div>
               )}
 
