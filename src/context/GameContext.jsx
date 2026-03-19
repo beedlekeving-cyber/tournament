@@ -496,6 +496,16 @@ export function GameProvider({ children }) {
       dispatch({ type: ACTIONS.TOURNAMENT_STARTED, payload: { bibleQuestions: bibleQuestions || [], playerCount: playerCount || 0, round: round || 1 } });
       // Also mark global tournament started flag
       dispatch({ type: 'TOURNAMENT_STARTED' });
+      // If this device is a registered player, re-emit join_lobby so the server
+      // can pair them immediately (covers the case where the user is on the page
+      // when the server auto-starts the tournament)
+      try {
+        const storedUser = JSON.parse(localStorage.getItem('qd_registered_user') || 'null');
+        if (storedUser?.username) {
+          const deviceId = getDeviceId();
+          socket.emit('join_lobby', { deviceId, username: storedUser.username, isSpecialSession: true, isTournament: true });
+        }
+      } catch (_) {}
     };
 
     const onTournamentMatchFound = ({ questions, opponent, round, isTournament }) => {

@@ -579,10 +579,12 @@ export default function SpecialScreen() {
   // Always compute msLeft live from scheduledStart so the 1-second ticker drives it
   const msLeft = scheduledStart ? Math.max(0, scheduledStart - now) : 0;
   const registrationOpen  = tournamentSchedule?.registrationOpen  ?? false;
+  // Server is the authority: use REST poll flags OR the live socket tournament phase
   const isTimeToStart     = tournamentSchedule?.isTimeToStart      ?? false;
-  const tournamentStarted = tournamentSchedule?.tournamentStarted  ?? false;
-  // Ended = a date was set and that date is now in the past
-  const tournamentEnded   = scheduledStart != null && now > scheduledStart;
+  const tournamentStarted = (tournamentSchedule?.tournamentStarted ?? false)
+                            || tournament.phase !== 'idle';
+  // "Ended" means the server confirmed the tournament ran. Never derive from clock alone.
+  const tournamentEnded   = false; // server pushes tournament_started — we don't guess from time
   const isLocked = scheduledStart && now < scheduledStart;
   const oneHourBeforeStart = scheduledStart ? scheduledStart - 3600000 : 0;
   const demoDisabled = scheduledStart && now >= oneHourBeforeStart;
@@ -686,6 +688,25 @@ export default function SpecialScreen() {
       })
       .catch(() => {});
   }, [showSplash]);
+
+  // If the REST poll tells us the tournament is already running and we are registered
+  // but the socket phase is still idle, reconnect into waiting_match so the server
+  // can re-pair this player (handles page refresh mid-tournament).
+  useEffect(() => {
+    if (!tournamentSchedule) return;
+    if (tournament.phase !== 'idle') return; // already in a live phase
+    const alreadyRunning = tournamentSchedule.tournamentStarted || tournamentSchedule.isTimeToStart;
+    if (!alreadyRunning) return;
+    const deviceId = getDeviceId();
+    const storedUser = (() => {
+      try { return JSON.parse(localStorage.getItem('qd_registered_user') || 'null'); } catch (_) { return null; }
+    })();
+    const knownUsername = username || storedUser?.username || state.username;
+    if (!knownUsername) return; // not registered, nothing to do
+    // Re-emit join_lobby so the server can re-pair this player
+    if (!socket.connected) socket.connect();
+    socket.emit('join_lobby', { deviceId, username: knownUsername, isSpecialSession: true, isTournament: true, rejoin: true });
+  }, [tournamentSchedule, tournament.phase]);
 
   const streakBonus = getStreakBonus(streak);
 
