@@ -1,5 +1,6 @@
 import { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
 import { QUESTIONS_DB } from '../data/questions';
+import { adminLogin } from '../utils/api';
 
 const AdminContext = createContext(null);
 
@@ -48,6 +49,9 @@ function buildInitialState() {
     // Auth
     isAuthenticated: false,
     authError: '',
+    loginLoading: false,
+    adminEmail: '',
+    adminToken: null,
 
     // Active tab
     tab: 'dashboard',
@@ -111,10 +115,12 @@ function buildInitialState() {
 // ─── Reducer ──────────────────────────────────────────────────────────────────
 function adminReducer(state, action) {
   switch (action.type) {
+    case 'LOGIN_LOADING':
+      return { ...state, loginLoading: true, authError: '' };
     case 'LOGIN':
-      return { ...state, isAuthenticated: true, authError: '' };
+      return { ...state, isAuthenticated: true, authError: '', loginLoading: false, adminEmail: action.payload.email, adminToken: action.payload.token ?? null };
     case 'LOGIN_FAIL':
-      return { ...state, authError: action.payload };
+      return { ...state, authError: action.payload, loginLoading: false };
     case 'LOGOUT':
       return { ...buildInitialState(), isAuthenticated: false };
 
@@ -329,12 +335,13 @@ export function AdminProvider({ children }) {
     }
   }, [state.toast]);
 
-  const login = useCallback((password) => {
-    // In production: use Firebase Auth. Password: admin2026
-    if (password === 'admin2026') {
-      dispatch({ type: 'LOGIN' });
-    } else {
-      dispatch({ type: 'LOGIN_FAIL', payload: 'Incorrect password. Try again.' });
+  const login = useCallback(async (email, password) => {
+    dispatch({ type: 'LOGIN_LOADING' });
+    try {
+      const data = await adminLogin(email, password);
+      dispatch({ type: 'LOGIN', payload: { email, token: data.token } });
+    } catch (err) {
+      dispatch({ type: 'LOGIN_FAIL', payload: err.message || 'Login failed. Try again.' });
     }
   }, []);
 

@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useAdmin } from './AdminContext';
-import { Lock, Eye, EyeOff, Shield } from 'lucide-react';
+import { Lock, Eye, EyeOff, Shield, Mail } from 'lucide-react';
 
 export default function AdminLogin() {
   const { state, login } = useAdmin();
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [show, setShow] = useState(false);
 
@@ -30,12 +31,24 @@ export default function AdminLogin() {
           <h2 className="text-white font-bold text-lg mb-6 text-center">Secure Access</h2>
 
           <div className="relative mb-4">
+            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && login(email, password)}
+              placeholder="Admin email"
+              className="w-full bg-white/5 border-2 border-white/10 focus:border-indigo-500 rounded-2xl pl-11 pr-4 py-4 text-white outline-none transition-all duration-300"
+            />
+          </div>
+
+          <div className="relative mb-4">
             <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
             <input
               type={show ? 'text' : 'password'}
               value={password}
               onChange={e => setPassword(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && login(password)}
+              onKeyDown={e => e.key === 'Enter' && login(email, password)}
               placeholder="Admin password"
               className="w-full bg-white/5 border-2 border-white/10 focus:border-indigo-500 rounded-2xl pl-11 pr-11 py-4 text-white outline-none transition-all duration-300"
             />
@@ -54,11 +67,12 @@ export default function AdminLogin() {
           )}
 
           <button
-            onClick={() => login(password)}
-            className="w-full py-4 rounded-2xl font-bold text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:opacity-90 transition-all active:scale-95"
+            onClick={() => login(email, password)}
+            disabled={state.loginLoading}
+            className="w-full py-4 rounded-2xl font-bold text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:opacity-90 transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
             style={{ boxShadow: '0 0 20px rgba(99,102,241,0.4)' }}
           >
-            🔐 Enter Dashboard
+            {state.loginLoading ? '⏳ Signing in…' : '🔐 Enter Dashboard'}
           </button>
 
 

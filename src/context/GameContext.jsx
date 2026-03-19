@@ -8,6 +8,7 @@ import {
 } from '../utils/anticheat';
 import socket from '../utils/socket';
 import { getOrCreateSessionToken } from '../utils/security';
+import { registerUser, fetchUsers } from '../utils/api';
 
 // ─── Question Source (normal or special session) ────────────────────────────
 function pickQuestions(count, excludeIds, seed) {
@@ -482,6 +483,9 @@ export function GameProvider({ children }) {
     dispatch({ type: 'SET_DEVICE', payload: { deviceId, coins: getCoins(), streak: getStreak() } });
     dispatch({ type: ACTIONS.JOIN_LOBBY });
 
+    // Register user on the backend (fire-and-forget — don't block the game flow)
+    registerUser(username, deviceId).catch(() => {});
+
     // Spectator counter (cosmetic)
     const specInterval = setInterval(() => {
       dispatch({ type: 'SET_SPECTATORS', payload: Math.floor(Math.random() * 300) + 50 });
@@ -605,14 +609,18 @@ export function GameProvider({ children }) {
     // Always navigate immediately so the button feels responsive
     dispatch({ type: ACTIONS.SET_STAGE, payload: 'leaderboard' });
     try {
-      const res = await fetch('http://localhost:4000/leaderboard');
-      if (res.ok) {
-        const data = await res.json();
-        // Merge: ensure current player is always present and up-to-date
-        const me = { username: state.username || 'You', wins: state.wins, totalTime: state.totalMatchTime, stage: state.wins >= 10 ? 'champion' : 'playing' };
-        const withoutMe = (data || []).filter(p => p.username !== me.username);
-        dispatch({ type: ACTIONS.SET_LEADERBOARD, payload: [me, ...withoutMe] });
-      }
+      const data = await fetchUsers();
+      // Map backend user shape → leaderboard entry shape
+      const users = (Array.isArray(data) ? data : data.users ?? []).map(u => ({
+        username: u.username,
+        wins: u.wins ?? 0,
+        totalTime: u.totalTime ?? u.total_time ?? 0,
+        stage: (u.wins ?? 0) >= 10 ? 'champion' : 'playing',
+      }));
+      // Merge: ensure current player is always present and up-to-date
+      const me = { username: state.username || 'You', wins: state.wins, totalTime: state.totalMatchTime, stage: state.wins >= 10 ? 'champion' : 'playing' };
+      const withoutMe = users.filter(p => p.username !== me.username);
+      dispatch({ type: ACTIONS.SET_LEADERBOARD, payload: [me, ...withoutMe] });
     } catch {
       // Fallback: just show the current player
       const fallback = [{ username: state.username || 'You', wins: state.wins, totalTime: state.totalMatchTime, stage: state.wins >= 10 ? 'champion' : 'playing' }];
