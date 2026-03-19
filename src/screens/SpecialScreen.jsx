@@ -10,7 +10,7 @@ import { BIBLE_DEMO_QUESTIONS } from '../data/bibleQuestions';
 import babaapete from '../assets/babaapete.jpeg';
 import SplashScreen from './SplashScreen';
 import socket from '../utils/socket';
-import { BASE_URL, registerUser, fetchUserCount, fetchTournamentSchedule } from '../utils/api';
+import { registerUser, fetchUserCount, fetchTournamentSchedule } from '../utils/api';
 
 // Demo Quiz Component - uses Bible questions for practice
 function DemoQuiz({ onClose, questions }) {
@@ -612,23 +612,19 @@ export default function SpecialScreen() {
       setEliminated(false);
       setElimInfo(null);
     }
-    // Check if this device already has a registered user on the server
+    // Check if this device already has a registered user
+    // 1. Check localStorage first (no network needed)
+    // 2. Only call the server if localStorage has a username to verify
     const checkJoinStatus = async () => {
       try {
-        const deviceId = getDeviceId();
-        const data = await registerUser('', deviceId).catch(async () => {
-          // If empty username is rejected, try a plain GET-style lookup via POST with just deviceId
-          const res = await fetch(`${BASE_URL}/api/users`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ deviceId }),
-          });
-          return res.ok ? res.json() : null;
-        });
-        if (data?.alreadyExists && data?.user?.username) {
+        const stored = JSON.parse(localStorage.getItem('qd_registered_user') || 'null');
+        if (stored?.username) {
+          // We have a locally stored username — trust it immediately
           setHasJoined(true);
-          setUsername(data.user.username);
+          setUsername(stored.username);
+          return;
         }
+        // No local record — nothing to auto-restore; user must join manually
       } catch (_) {}
     };
     checkJoinStatus();
