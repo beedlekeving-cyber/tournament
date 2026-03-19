@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAdmin } from '../AdminContext';
 import { Users, BookOpen, Trophy, Settings, TrendingUp, Zap, AlertCircle, CheckCircle, RotateCcw } from 'lucide-react';
-import { BASE_URL as API } from '../../utils/api';
+import { BASE_URL as API, adminAuthHeaders } from '../../utils/api';
 
 export default function DashboardTab() {
   const { state, dispatch } = useAdmin();
@@ -136,7 +136,7 @@ export default function DashboardTab() {
               if (!confirm('Are you sure? This will clear ALL game data including leaderboard, matches, and registered players.')) return;
               setResetting(true);
               try {
-                const res = await fetch(`${API}/admin/reset-all`, { method: 'POST' });
+                const res = await fetch(`${API}/admin/reset-all`, { method: 'POST', headers: adminAuthHeaders() });
                 if (res.ok) {
                   dispatch({ type: 'SHOW_TOAST', payload: { type: 'success', msg: 'Game fully reset!' } });
                 } else {

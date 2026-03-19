@@ -1,6 +1,6 @@
 import { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
 import { QUESTIONS_DB } from '../data/questions';
-import { adminLogin } from '../utils/api';
+import { adminLogin, saveAdminToken, clearAdminToken } from '../utils/api';
 
 const AdminContext = createContext(null);
 
@@ -339,13 +339,17 @@ export function AdminProvider({ children }) {
     dispatch({ type: 'LOGIN_LOADING' });
     try {
       const data = await adminLogin(email, password);
+      saveAdminToken(data.token);
       dispatch({ type: 'LOGIN', payload: { email, token: data.token } });
     } catch (err) {
       dispatch({ type: 'LOGIN_FAIL', payload: err.message || 'Login failed. Try again.' });
     }
   }, []);
 
-  const logout = useCallback(() => dispatch({ type: 'LOGOUT' }), []);
+  const logout = useCallback(() => {
+    clearAdminToken();
+    dispatch({ type: 'LOGOUT' });
+  }, []);
 
   return (
     <AdminContext.Provider value={{ state, dispatch, login, logout }}>

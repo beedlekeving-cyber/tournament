@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAdmin } from '../AdminContext';
 import { Plus, Pencil, Trash2, X, CheckCircle, FlaskConical, ToggleLeft, ToggleRight, AlertTriangle, Clock, Play, Square, Loader, Users, Rocket, RotateCcw } from 'lucide-react';
 import babaapete from '../../assets/babaapete.jpeg';
-import { BASE_URL as SOCKET_URL } from '../../utils/api';
+import { BASE_URL as SOCKET_URL, adminAuthHeaders } from '../../utils/api';
 
 const CORRECT_OPTIONS = ['A', 'B', 'C', 'D'];
 
@@ -34,7 +34,7 @@ export default function SpecialSessionTab() {
     try {
       await fetch(`${SOCKET_URL}/admin/demo/start`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: adminAuthHeaders(),
         body: JSON.stringify({ count: demoCount }),
       });
       setDemoActive(true);
@@ -45,7 +45,7 @@ export default function SpecialSessionTab() {
   const stopDemo = async () => {
     setDemoLoading(true);
     try {
-      await fetch(`${SOCKET_URL}/admin/demo/stop`, { method: 'POST' });
+      await fetch(`${SOCKET_URL}/admin/demo/stop`, { method: 'POST', headers: adminAuthHeaders() });
       setDemoActive(false);
     } catch (e) { console.error(e); }
     setDemoLoading(false);
@@ -79,7 +79,7 @@ export default function SpecialSessionTab() {
       const scheduledDate = new Date(scheduleInput).toISOString();
       const res = await fetch(`${SOCKET_URL}/admin/tournament/schedule`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: adminAuthHeaders(),
         body: JSON.stringify({ scheduledDate }),
       });
       if (res.ok) {
@@ -93,7 +93,7 @@ export default function SpecialSessionTab() {
   const startTournament = async () => {
     setTournamentLoading(true);
     try {
-      const res = await fetch(`${SOCKET_URL}/admin/tournament/start`, { method: 'POST' });
+      const res = await fetch(`${SOCKET_URL}/admin/tournament/start`, { method: 'POST', headers: adminAuthHeaders() });
       const data = await res.json();
       if (res.ok) {
         dispatch({ type: 'SHOW_TOAST', payload: { type: 'success', msg: `🚀 Tournament started! ${data.playerCount} players paired into ${data.matches?.length || 0} matches!` } });
@@ -110,7 +110,7 @@ export default function SpecialSessionTab() {
   const resetTournament = async () => {
     setTournamentLoading(true);
     try {
-      await fetch(`${SOCKET_URL}/admin/tournament/reset`, { method: 'POST' });
+      await fetch(`${SOCKET_URL}/admin/tournament/reset`, { method: 'POST', headers: adminAuthHeaders() });
       setScheduleInput('');
       dispatch({ type: 'SET_SCHEDULE_START', payload: null });
       dispatch({ type: 'SHOW_TOAST', payload: { type: 'success', msg: 'Tournament reset!' } });
@@ -130,7 +130,7 @@ export default function SpecialSessionTab() {
     try {
       await fetch(`${SOCKET_URL}/admin/special-session`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: adminAuthHeaders(),
         body: JSON.stringify({ active: newActive }),
       });
     } catch (_) {}

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAdmin } from '../AdminContext';
 import { Play, RotateCcw, Users, Swords, Clock, RefreshCw, CalendarClock } from 'lucide-react';
-import { BASE_URL as API } from '../../utils/api';
+import { BASE_URL as API, adminAuthHeaders } from '../../utils/api';
 
 export default function TournamentTab() {
   const { dispatch } = useAdmin();
@@ -46,7 +46,7 @@ export default function TournamentTab() {
       const scheduledDate = new Date(`${dateInput}T${timeInput}`).toISOString();
       const res = await fetch(`${API}/admin/tournament/schedule`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: adminAuthHeaders(),
         body: JSON.stringify({ scheduledDate }),
       });
       const data = await res.json();
@@ -62,7 +62,7 @@ export default function TournamentTab() {
   const startTournament = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API}/admin/tournament/start`, { method: 'POST' });
+      const res = await fetch(`${API}/admin/tournament/start`, { method: 'POST', headers: adminAuthHeaders() });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed');
       dispatch({ type: 'SHOW_TOAST', payload: { type: 'success', msg: `Tournament started with ${data.playerCount} players!` } });
@@ -76,7 +76,7 @@ export default function TournamentTab() {
   const resetTournament = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API}/admin/tournament/reset`, { method: 'POST' });
+      const res = await fetch(`${API}/admin/tournament/reset`, { method: 'POST', headers: adminAuthHeaders() });
       if (!res.ok) throw new Error('Failed');
       dispatch({ type: 'SHOW_TOAST', payload: { type: 'success', msg: 'Tournament reset. Back to normal mode.' } });
       setDateInput('');

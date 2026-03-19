@@ -330,19 +330,24 @@ export default function SpecialScreen() {
       setEliminated(false);
       setElimInfo(null);
     }
-    // Check if user already joined by querying server
+    // Check if this device already has a registered user on the server
     const checkJoinStatus = async () => {
       try {
         const deviceId = getDeviceId();
-        const response = await fetch(`${BASE_URL}/api/check-joined/${deviceId}`);
-        const data = await response.json();
-        if (data.hasJoined) {
+        const data = await registerUser('', deviceId).catch(async () => {
+          // If empty username is rejected, try a plain GET-style lookup via POST with just deviceId
+          const res = await fetch(`${BASE_URL}/api/users`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ deviceId }),
+          });
+          return res.ok ? res.json() : null;
+        });
+        if (data?.alreadyExists && data?.user?.username) {
           setHasJoined(true);
-          setUsername(data.username || '');
+          setUsername(data.user.username);
         }
-      } catch (error) {
-        console.error('Error checking join status:', error);
-      }
+      } catch (_) {}
     };
     checkJoinStatus();
     
@@ -415,10 +420,12 @@ export default function SpecialScreen() {
     setJoinError('');
     try {
       const deviceId = getDeviceId();
-      await registerUser(trimmed, deviceId);
-      // Server confirmed — now join the lobby
+      const data = await registerUser(trimmed, deviceId);
+      // Use the username the server knows about (covers alreadyExists case)
+      const confirmedUsername = data?.user?.username || trimmed;
+      setUsername(confirmedUsername);
       setHasJoined(true);
-      joinLobby(trimmed);
+      joinLobby(confirmedUsername);
     } catch (err) {
       setJoinError(err.message || 'Failed to join. Please try again.');
     } finally {

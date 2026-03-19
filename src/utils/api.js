@@ -1,6 +1,35 @@
 // ─── Backend API Utility ──────────────────────────────────────────────────────
 export const BASE_URL = 'https://quizbackend-uevc.onrender.com';
 
+const TOKEN_KEY = 'qd_admin_token';
+
+/** Persist the JWT received after admin login */
+export function saveAdminToken(token) {
+  localStorage.setItem(TOKEN_KEY, token);
+}
+
+/** Retrieve the stored JWT (or null) */
+export function getAdminToken() {
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+/** Remove the stored JWT on logout */
+export function clearAdminToken() {
+  localStorage.removeItem(TOKEN_KEY);
+}
+
+/**
+ * Returns headers that include Content-Type and the Authorization bearer token.
+ * Use this for every admin-protected fetch call.
+ */
+export function adminAuthHeaders(extra = {}) {
+  return {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${getAdminToken()}`,
+    ...extra,
+  };
+}
+
 /**
  * Get the number of registered players
  * GET /api/users/count
@@ -44,11 +73,12 @@ export async function registerUser(username, deviceId) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, deviceId }),
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || `Server error: ${res.status}`);
+  const data = await res.json().catch(() => ({}));
+  // Treat "alreadyExists" as a success — the server confirmed the user is registered
+  if (!res.ok && !data.alreadyExists) {
+    throw new Error(data.message || `Server error: ${res.status}`);
   }
-  return res.json();
+  return data;
 }
 
 /**
