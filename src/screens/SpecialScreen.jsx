@@ -618,19 +618,29 @@ export default function SpecialScreen() {
       setEliminated(false);
       setElimInfo(null);
     }
+
+    // Connect socket immediately so we receive tournament_started /
+    // tournament_countdown events even before the user clicks Join
+    const deviceId = getDeviceId();
+    if (!socket.connected) socket.connect();
+    socket.emit('register_device', { deviceId, sessionToken: null });
+
     // Check if this device already has a registered user
-    // 1. Check localStorage first (no network needed)
-    // 2. Only call the server if localStorage has a username to verify
     const checkJoinStatus = async () => {
       try {
         const stored = JSON.parse(localStorage.getItem('qd_registered_user') || 'null');
         if (stored?.username) {
-          // We have a locally stored username — trust it immediately
           setHasJoined(true);
           setUsername(stored.username);
+          // Re-register with socket so server knows we're online
+          socket.emit('join_lobby', {
+            deviceId,
+            username: stored.username,
+            isSpecialSession: true,
+            isTournament: true,
+          });
           return;
         }
-        // No local record — nothing to auto-restore; user must join manually
       } catch (_) {}
     };
     checkJoinStatus();
@@ -748,11 +758,28 @@ export default function SpecialScreen() {
     try {
       const deviceId = getDeviceId();
       const data = await registerUser(trimmed, deviceId);
-      // Use the username the server knows about (covers alreadyExists case)
+      // Use the username the server confirmed
       const confirmedUsername = data?.user?.username || trimmed;
       setUsername(confirmedUsername);
+      // Persist so returning users are recognised on page reload
+      localStorage.setItem('qd_registered_user', JSON.stringify({
+        username: confirmedUsername,
+        sessionId: ssInfo?.sessionId || 'default',
+        registeredAt: Date.now(),
+      }));
       setHasJoined(true);
-      joinLobby(confirmedUsername);
+      // Connect socket and register with the server for the tournament queue.
+      // Do NOT call joinLobby() — that starts a bot-fallback timer and uses
+      // the regular (non-tournament) queue. Instead emit directly so the server
+      // places this player in the tournament waiting list.
+      if (!socket.connected) socket.connect();
+      socket.emit('register_device', { deviceId, sessionToken: null });
+      socket.emit('join_lobby', {
+        deviceId,
+        username: confirmedUsername,
+        isSpecialSession: true,
+        isTournament: true,
+      });
     } catch (err) {
       setJoinError(err.message || 'Failed to join. Please try again.');
     } finally {
