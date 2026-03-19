@@ -312,6 +312,8 @@ export default function SpecialScreen() {
   const registrationOpen  = tournamentSchedule?.registrationOpen  ?? false;
   const isTimeToStart     = tournamentSchedule?.isTimeToStart      ?? false;
   const tournamentStarted = tournamentSchedule?.tournamentStarted  ?? false;
+  // Ended = was scheduled, time has fully passed, registration closed, not live
+  const tournamentEnded   = scheduledStart != null && msLeft === 0 && !registrationOpen && !tournamentStarted && !isTimeToStart;
   const isLocked = scheduledStart && now < scheduledStart;
   const oneHourBeforeStart = scheduledStart ? scheduledStart - 3600000 : 0;
   const demoDisabled = scheduledStart && now >= oneHourBeforeStart;
@@ -889,7 +891,42 @@ export default function SpecialScreen() {
           }}>
           <h2 className="text-xl font-bold text-white mb-5 text-center">🎯 Enter the Special Arena</h2>
 
-          {hasJoined ? (
+          {tournamentEnded ? (
+            /* ── Tournament Ended ── */
+            <div className="text-center py-4">
+              <div className="relative inline-flex items-center justify-center mb-5">
+                <div className="w-24 h-24 rounded-full flex items-center justify-center"
+                  style={{ background: 'rgba(239,68,68,0.15)', border: '2px solid rgba(239,68,68,0.35)' }}>
+                  <Trophy className="w-12 h-12 text-red-400" />
+                </div>
+              </div>
+              <h3 className="text-2xl font-black text-white mb-2">Tournament Ended</h3>
+              <p className="text-gray-400 text-sm mb-6 leading-relaxed">
+                This tournament has concluded.<br />Thank you for participating!
+              </p>
+              <div className="rounded-2xl p-4 mb-4"
+                style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)' }}>
+                <p className="text-red-300 text-xs font-semibold uppercase tracking-widest mb-1">Tournament Date</p>
+                <p className="text-white font-bold text-sm">
+                  {tournamentSchedule?.scheduledDateFormatted
+                    ?? (scheduledStart ? new Date(scheduledStart).toLocaleString('en-US', {
+                        weekday: 'long', year: 'numeric', month: 'long',
+                        day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true,
+                      }) : '—')}
+                </p>
+                {tournamentSchedule?.registeredCount != null && (
+                  <p className="text-gray-400 text-xs mt-2">
+                    👥 {tournamentSchedule.registeredCount} players participated
+                  </p>
+                )}
+              </div>
+              <p className="text-gray-500 text-xs">
+                Stay tuned for the next tournament announcement! 🎉
+              </p>
+            </div>
+
+          ) : hasJoined ? (
+            /* ── Already joined + countdown ── */
             <div className="text-center">
               <div className="bg-green-500/20 border-2 border-green-400/50 rounded-xl p-6 mb-4">
                 <CheckCircle2 className="w-16 h-16 text-green-400 mx-auto mb-3" />
