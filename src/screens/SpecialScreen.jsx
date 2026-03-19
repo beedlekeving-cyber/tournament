@@ -10,7 +10,7 @@ import { BIBLE_DEMO_QUESTIONS } from '../data/bibleQuestions';
 import babaapete from '../assets/babaapete.jpeg';
 import SplashScreen from './SplashScreen';
 import socket from '../utils/socket';
-import { BASE_URL } from '../utils/api';
+import { BASE_URL, registerUser } from '../utils/api';
 
 // Demo Quiz Component - uses Bible questions for practice
 function DemoQuiz({ onClose, questions }) {
@@ -289,6 +289,8 @@ export default function SpecialScreen() {
   const [registered, setRegistered] = useState(false);
   const [registeredUsername, setRegisteredUsername] = useState('');
   const [hasJoined, setHasJoined] = useState(false);
+  const [joining, setJoining] = useState(false);
+  const [joinError, setJoinError] = useState('');
 
   // Check if special session is active from GameContext
   const specialActive = state.specialSessionActive;
@@ -393,7 +395,7 @@ export default function SpecialScreen() {
     setRegisteredUsername(trimmed);
   };
 
-  const handleJoin = () => {
+  const handleJoin = async () => {
     const trimmed = username.trim();
     if (!trimmed) { setError('Please enter a username'); return; }
     if (trimmed.length < 3) { setError('Username must be at least 3 characters'); return; }
@@ -401,9 +403,19 @@ export default function SpecialScreen() {
     if (isDeviceEliminated()) { setError('⛔ Your device is evicted. Wait for the next tournament.'); return; }
     if (isUsernameTaken(trimmed)) { setError('Username already taken — choose another.'); return; }
     playClick();
-    // Server will track joined status in registeredPlayers Map
-    setHasJoined(true);
-    joinLobby(trimmed);
+    setJoining(true);
+    setJoinError('');
+    try {
+      const deviceId = getDeviceId();
+      await registerUser(trimmed, deviceId);
+      // Server confirmed — now join the lobby
+      setHasJoined(true);
+      joinLobby(trimmed);
+    } catch (err) {
+      setJoinError(err.message || 'Failed to join. Please try again.');
+    } finally {
+      setJoining(false);
+    }
   };
 
   const handleKey = (e) => { if (e.key === 'Enter') isLocked ? handleRegister() : handleJoin(); };
@@ -912,17 +924,21 @@ export default function SpecialScreen() {
                 <p className="text-red-300 text-sm mb-4 flex items-center gap-2"><span>⚠️</span>{error}</p>
               )}
 
+              {joinError && (
+                <p className="text-red-400 text-sm mb-4 flex items-center gap-2 bg-red-500/10 border border-red-500/30 rounded-xl px-3 py-2"><span>❌</span>{joinError}</p>
+              )}
+
               <button
                 onClick={handleJoin}
-                disabled={eliminated}
+                disabled={eliminated || joining}
                 className={`w-full py-4 rounded-2xl font-bold text-lg text-white transition-all duration-300 transform hover:scale-[1.02] active:scale-95 shadow-xl
-                  ${eliminated ? 'opacity-40 cursor-not-allowed' : ''}`}
-                style={!eliminated ? {
+                  ${eliminated || joining ? 'opacity-60 cursor-not-allowed' : ''}`}
+                style={!eliminated && !joining ? {
                   background: 'linear-gradient(135deg, #d97706, #ec4899, #a78bfa)',
                   boxShadow: '0 0 30px rgba(217,119,6,0.4), 0 4px 20px rgba(0,0,0,0.5)',
                 } : { background: '#374151' }}
               >
-                🏆 Join Special Match
+                {joining ? '⏳ Joining…' : '🏆 Join Special Match'}
               </button>
             </>
           )}
