@@ -10,7 +10,7 @@ import { BIBLE_DEMO_QUESTIONS } from '../data/bibleQuestions';
 import babaapete from '../assets/babaapete.jpeg';
 import SplashScreen from './SplashScreen';
 import socket from '../utils/socket';
-import { registerUser, fetchUserCount, fetchTournamentSchedule, checkUserExists } from '../utils/api';
+import { registerUser, fetchUserCount, fetchTournamentSchedule } from '../utils/api';
 
 // Demo Quiz Component - uses Bible questions for practice
 function DemoQuiz({ onClose, questions }) {
@@ -685,27 +685,13 @@ export default function SpecialScreen() {
       const stored = JSON.parse(localStorage.getItem('qd_registered_user') || 'null');
 
       if (stored?.username && stored?.sessionId === currentSessionId) {
-        // Same session — verify the user still exists in the DB before restoring UI.
-        // This handles the case where the admin deleted them from the backend.
-        checkUserExists(stored.username).then((exists) => {
-          if (!exists) {
-            // User was deleted — wipe local cache and show the registration form
-            localStorage.removeItem('qd_registered_user');
-            setUsername('');
-            setHasJoined(false);
-            setRegistered(false);
-            setRegisteredUsername('');
-          } else {
-            // User confirmed in DB — restore UI state
-            setUsername(stored.username);
-            setRegistered(true);
-            setRegisteredUsername(stored.username);
-            // Only restore hasJoined if the session is still active
-            if (ss?.active) setHasJoined(true);
-          }
-        });
+        // Restore username for display only — NO auto hasJoined, NO API call.
+        // Registration only happens when the user clicks the button.
+        setUsername(stored.username);
+        setRegistered(true);
+        setRegisteredUsername(stored.username);
       } else if (stored?.sessionId && stored.sessionId !== currentSessionId) {
-        // Stale data from a previous session — clear it so the user starts fresh
+        // Stale data from a previous session — clear it
         localStorage.removeItem('qd_registered_user');
       }
     } catch (_) {}
@@ -739,31 +725,6 @@ export default function SpecialScreen() {
     };
     socket.on('registration_error', onRegistrationError);
     return () => socket.off('registration_error', onRegistrationError);
-  }, []);
-
-  // When the tournament starts, re-emit join_lobby for any registered user on the page.
-  // This is the critical step: the server needs to receive join_lobby to queue the player
-  // for matchmaking. Users who registered pre-lock (handleRegister) never emitted it yet.
-  // Users who joined post-lock (handleJoin) already emitted it, but re-emitting is safe
-  // — the server deduplicates by deviceId.
-  useEffect(() => {
-    const onTournamentStarted = () => {
-      try {
-        const stored = JSON.parse(localStorage.getItem('qd_registered_user') || 'null');
-        if (!stored?.username) return; // not registered — nothing to do
-        const deviceId = getDeviceId();
-        if (!socket.connected) socket.connect();
-        socket.emit('register_device', { deviceId, sessionToken: null });
-        socket.emit('join_lobby', {
-          deviceId,
-          username: stored.username,
-          isSpecialSession: true,
-          isTournament: true,
-        });
-      } catch (_) {}
-    };
-    socket.on('tournament_started', onTournamentStarted);
-    return () => socket.off('tournament_started', onTournamentStarted);
   }, []);
 
   // Poll GET /api/users/count so the number stays accurate
