@@ -95,6 +95,7 @@ const initialState = {
     phase: 'idle',           // idle | countdown_warning | waiting_match | in_match | round_won | eliminated | champion
     countdownWarning: null,  // e.g. '5 minutes to go!'
     round: 1,
+    matchId: null,           // current match ID (needed for submit_answer)
     bibleQuestions: [],      // full bank sent by server on tournament_started
     matchQuestions: [],      // 5 questions for current match (from match_found)
     currentQuestionIndex: 0,
@@ -351,7 +352,7 @@ function gameReducer(state, action) {
       return { ...state, tournamentStarted: true, tournament: { ...state.tournament, phase: 'waiting_match', bibleQuestions: action.payload.bibleQuestions || [], playerCount: action.payload.playerCount || 0, round: action.payload.round || 1, countdownWarning: null } };
 
     case ACTIONS.TOURNAMENT_MATCH_FOUND:
-      return { ...state, tournament: { ...state.tournament, phase: 'in_match', matchQuestions: action.payload.questions || [], currentQuestionIndex: 0, opponent: action.payload.opponent, myAnswer: null, roundResult: null, round: action.payload.round || state.tournament.round } };
+      return { ...state, tournament: { ...state.tournament, phase: 'in_match', matchId: action.payload.matchId, matchQuestions: action.payload.questions || [], currentQuestionIndex: 0, opponent: action.payload.opponent, myAnswer: null, roundResult: null, round: action.payload.round || state.tournament.round } };
 
     case ACTIONS.TOURNAMENT_SUBMIT_ANSWER:
       return { ...state, tournament: { ...state.tournament, myAnswer: action.payload.answer } };
@@ -488,33 +489,24 @@ export function GameProvider({ children }) {
     };
 
     // ── Tournament socket events ──────────────────────────────────────────────
-    const onTournamentCountdown = ({ message, secondsLeft }) => {
-      dispatch({ type: ACTIONS.TOURNAMENT_COUNTDOWN_WARNING, payload: { message: message || `Starting in ${secondsLeft}s…` } });
+    const onTournamentCountdown = ({ message, secondsRemaining, secondsLeft }) => {
+      const secs = secondsRemaining ?? secondsLeft;
+      dispatch({ type: ACTIONS.TOURNAMENT_COUNTDOWN_WARNING, payload: { message: message || `Tournament starts in ${secs}s!` } });
     };
 
     const onTournamentStartedFull = ({ bibleQuestions, playerCount, round }) => {
       dispatch({ type: ACTIONS.TOURNAMENT_STARTED, payload: { bibleQuestions: bibleQuestions || [], playerCount: playerCount || 0, round: round || 1 } });
       // Also mark global tournament started flag
       dispatch({ type: 'TOURNAMENT_STARTED' });
-      // If this device is a registered player, re-emit join_lobby so the server
-      // can pair them immediately (covers the case where the user is on the page
-      // when the server auto-starts the tournament)
-      try {
-        const storedUser = JSON.parse(localStorage.getItem('qd_registered_user') || 'null');
-        if (storedUser?.username) {
-          const deviceId = getDeviceId();
-          socket.emit('join_lobby', { deviceId, username: storedUser.username, isSpecialSession: true, isTournament: true });
-        }
-      } catch (_) {}
     };
 
-    const onTournamentMatchFound = ({ questions, opponent, round, isTournament }) => {
+    const onTournamentMatchFound = ({ matchId, questions, opponent, round, isTournament }) => {
       if (!isTournament) return; // handled by the normal match_found listener above
-      dispatch({ type: ACTIONS.TOURNAMENT_MATCH_FOUND, payload: { questions: questions || [], opponent: { username: opponent?.username, id: opponent?.id || opponent?.deviceId }, round: round || 1 } });
+      dispatch({ type: ACTIONS.TOURNAMENT_MATCH_FOUND, payload: { matchId, questions: questions || [], opponent: { username: opponent?.username, id: opponent?.id || opponent?.deviceId }, round: round || 1 } });
     };
 
-    const onTournamentRoundResult = (payload) => {
-      dispatch({ type: ACTIONS.TOURNAMENT_ROUND_RESULT, payload });
+    const onTournamentRoundResult = ({ result, questionIndex, correctAnswer, myAnswer, opponentAnswer, matchOver }) => {
+      dispatch({ type: ACTIONS.TOURNAMENT_ROUND_RESULT, payload: { result, questionIndex, correctAnswer, myAnswer, opponentAnswer, matchOver } });
     };
 
     const onTournamentRoundWon = ({ nextRound, round }) => {
@@ -739,10 +731,18 @@ export function GameProvider({ children }) {
     }
   }, [state.username, state.wins, state.totalMatchTime]);
 
-  const submitTournamentAnswer = useCallback((answer, questionId) => {
+  const submitTournamentAnswer = useCallback((answer, questionId, matchId, timeLeft) => {
     const deviceId = getDeviceId();
     dispatch({ type: ACTIONS.TOURNAMENT_SUBMIT_ANSWER, payload: { answer } });
-    socket.emit('submit_answer', { answer, questionId, deviceId, isTournament: true });
+    socket.emit('submit_answer', {
+      answer,
+      questionId,
+      matchId,
+      deviceId,
+      timeLeft: timeLeft ?? 0,
+      clientTimestamp: Date.now(),
+      isTournament: true,
+    });
   }, []);
 
   const resetGame = useCallback(() => {

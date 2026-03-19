@@ -273,10 +273,11 @@ function DemoQuiz({ onClose, questions }) {
 }
 
 // ── Tournament: Live Match Component ─────────────────────────────────────────
-function TournamentMatch({ questions, opponent, round, username, onAnswered }) {
+function TournamentMatch({ questions, opponent, round, username, matchId, onAnswered }) {
   const [currentQ, setCurrentQ] = useState(0);
   const [selected, setSelected] = useState(null);
   const [showResult, setShowResult] = useState(false);
+  const [correctAnswer, setCorrectAnswer] = useState(null);
   const [timer, setTimer] = useState(9);
   const [opponentAnswered, setOpponentAnswered] = useState(false);
 
@@ -286,6 +287,7 @@ function TournamentMatch({ questions, opponent, round, username, onAnswered }) {
   useEffect(() => {
     setSelected(null);
     setShowResult(false);
+    setCorrectAnswer(null);
     setTimer(9);
     setOpponentAnswered(false);
   }, [currentQ]);
@@ -310,16 +312,19 @@ function TournamentMatch({ questions, opponent, round, username, onAnswered }) {
   useEffect(() => {
     const handler = (data) => {
       if (!data.isTournament) return;
+      // Spec: { result, correctAnswer, myAnswer, opponentAnswer, matchOver }
+      setCorrectAnswer(data.correctAnswer ?? null);
       setShowResult(true);
-      if (data.correct) playCorrect(); else playWrong();
-      // Advance to next question after 2.5s
-      setTimeout(() => {
-        const next = currentQ + 1;
-        if (next < questions.length) {
-          setCurrentQ(next);
-        }
-        // If no more questions, parent handles the phase change via socket events
-      }, 2500);
+      const won = data.result === 'win' || data.myAnswer === data.correctAnswer;
+      if (won) playCorrect(); else playWrong();
+      // Advance to next question after 2.5s unless the match is over
+      if (!data.matchOver) {
+        setTimeout(() => {
+          const next = currentQ + 1;
+          if (next < questions.length) setCurrentQ(next);
+        }, 2500);
+      }
+      // If matchOver, parent handles phase change via tournament_round_won / tournament_eliminated
     };
     socket.on('round_result', handler);
     return () => socket.off('round_result', handler);
@@ -329,7 +334,7 @@ function TournamentMatch({ questions, opponent, round, username, onAnswered }) {
     if (showResult || selected !== null) return;
     playClick();
     setSelected(optionKey);
-    onAnswered(optionKey, q?.id);
+    onAnswered(optionKey, q?.id, matchId, timer); // pass timeLeft
     // Result will come from server via round_result
   };
 
@@ -342,7 +347,8 @@ function TournamentMatch({ questions, opponent, round, username, onAnswered }) {
         : q.options.map((opt, i) => [String.fromCharCode(65 + i), opt]))
     : [];
 
-  const correctKey = q.correct;
+  // Use correctAnswer from server (round_result) if available, fall back to q.correct
+  const correctKey = correctAnswer ?? q.correct;
 
   return (
     <div className="fixed inset-0 z-40 flex flex-col items-center justify-center p-4"
@@ -543,7 +549,7 @@ function TournamentChampion({ username }) {
 }
 
 export default function SpecialScreen() {
-  const { joinLobby, state, submitTournamentAnswer } = useGame();
+  const { joinLobby, state, dispatch, submitTournamentAnswer } = useGame();
   const tournament = state.tournament;
   const [username, setUsername] = useState('');
   const [error, setError] = useState('');
@@ -685,23 +691,21 @@ export default function SpecialScreen() {
       .catch(() => {});
   }, [showSplash]);
 
-  // If the REST poll tells us the tournament is already running and we are registered
-  // but the socket phase is still idle, reconnect into waiting_match so the server
-  // can re-pair this player (handles page refresh mid-tournament).
+  // If the REST poll tells us the tournament is already running but our local
+  // phase is still idle, show the "waiting for match" screen. The server will
+  // push match_found when it's ready — we don't re-emit join_lobby here because
+  // the server auto-pairs all registered players at start time.
   useEffect(() => {
     if (!tournamentSchedule) return;
     if (tournament.phase !== 'idle') return; // already in a live phase
     const alreadyRunning = tournamentSchedule.tournamentStarted || tournamentSchedule.isTimeToStart;
     if (!alreadyRunning) return;
-    const deviceId = getDeviceId();
     const storedUser = (() => {
       try { return JSON.parse(localStorage.getItem('qd_registered_user') || 'null'); } catch (_) { return null; }
     })();
-    const knownUsername = username || storedUser?.username || state.username;
-    if (!knownUsername) return; // not registered, nothing to do
-    // Re-emit join_lobby so the server can re-pair this player
-    if (!socket.connected) socket.connect();
-    socket.emit('join_lobby', { deviceId, username: knownUsername, isSpecialSession: true, isTournament: true, rejoin: true });
+    if (!storedUser?.username) return; // not registered, nothing to show
+    // Show waiting screen — server will push match_found when the round is ready
+    dispatch({ type: 'TOURNAMENT_STARTED' });
   }, [tournamentSchedule, tournament.phase]);
 
   const streakBonus = getStreakBonus(streak);
@@ -783,7 +787,8 @@ export default function SpecialScreen() {
           opponent={tournament.opponent}
           round={tournament.round}
           username={username || state.username}
-          onAnswered={(answer, questionId) => submitTournamentAnswer(answer, questionId)}
+          matchId={tournament.matchId}
+          onAnswered={(answer, questionId, matchId, timeLeft) => submitTournamentAnswer(answer, questionId, matchId, timeLeft)}
         />
       </>
     );
