@@ -305,15 +305,13 @@ export default function SpecialScreen() {
   // Backend schedule takes priority; fall back to locally cached ssInfo
   const rawScheduledDate = tournamentSchedule?.scheduledDate ?? ssInfo?.scheduledStart ?? null;
   const scheduledStart = rawScheduledDate ? new Date(rawScheduledDate).getTime() : null;
-  // Use server-provided ms-until-start (avoids client clock drift) when fresh, else compute locally
-  const msLeft = tournamentSchedule?.timeUntilStart != null
-    ? Math.max(0, tournamentSchedule.timeUntilStart - (now - (tournamentSchedule._fetchedAt ?? now)))
-    : scheduledStart ? Math.max(0, scheduledStart - now) : 0;
+  // Always compute msLeft live from scheduledStart so the 1-second ticker drives it
+  const msLeft = scheduledStart ? Math.max(0, scheduledStart - now) : 0;
   const registrationOpen  = tournamentSchedule?.registrationOpen  ?? false;
   const isTimeToStart     = tournamentSchedule?.isTimeToStart      ?? false;
   const tournamentStarted = tournamentSchedule?.tournamentStarted  ?? false;
-  // Ended = was scheduled, time has fully passed, registration closed, not live
-  const tournamentEnded   = scheduledStart != null && msLeft === 0 && !registrationOpen && !tournamentStarted && !isTimeToStart;
+  // Ended = a date was set and that date is now in the past
+  const tournamentEnded   = scheduledStart != null && now > scheduledStart;
   const isLocked = scheduledStart && now < scheduledStart;
   const oneHourBeforeStart = scheduledStart ? scheduledStart - 3600000 : 0;
   const demoDisabled = scheduledStart && now >= oneHourBeforeStart;
@@ -395,12 +393,28 @@ export default function SpecialScreen() {
   // Fetch tournament schedule from backend and keep it fresh
   useEffect(() => {
     const load = () => fetchTournamentSchedule()
-      .then(data => setTournamentSchedule({ ...data, _fetchedAt: Date.now() }))
+      .then(data => {
+        setTournamentSchedule({ ...data, _fetchedAt: Date.now() });
+        if (data.registeredCount != null) setLobbyCount(data.registeredCount);
+      })
       .catch(() => {});
+    // Fetch immediately on mount, then again once the splash is dismissed,
+    // and keep refreshing every 30 s
     load();
     const interval = setInterval(load, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  // Re-fetch schedule as soon as the splash screen is dismissed
+  useEffect(() => {
+    if (showSplash) return;
+    fetchTournamentSchedule()
+      .then(data => {
+        setTournamentSchedule({ ...data, _fetchedAt: Date.now() });
+        if (data.registeredCount != null) setLobbyCount(data.registeredCount);
+      })
+      .catch(() => {});
+  }, [showSplash]);
 
   const streakBonus = getStreakBonus(streak);
 
