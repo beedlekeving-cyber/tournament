@@ -273,24 +273,33 @@ function DemoQuiz({ onClose, questions }) {
 }
 
 // ── Tournament: Live Match Component ─────────────────────────────────────────
-function TournamentMatch({ questions, opponent, round, username, matchId, onAnswered }) {
-  const [currentQ, setCurrentQ] = useState(0);
+function TournamentMatch({ questions, currentQuestionIndex, totalQuestions, opponent, round, username, matchId, bothCorrectFeedback, onAnswered }) {
   const [selected, setSelected] = useState(null);
   const [showResult, setShowResult] = useState(false);
   const [correctAnswer, setCorrectAnswer] = useState(null);
   const [timer, setTimer] = useState(9);
   const [opponentAnswered, setOpponentAnswered] = useState(false);
+  const [bothCorrectMsg, setBothCorrectMsg] = useState(null);
 
-  const q = questions[currentQ];
+  const q = questions[currentQuestionIndex];
 
-  // Reset per question
+  // Reset per question whenever the server advances the index
   useEffect(() => {
     setSelected(null);
     setShowResult(false);
     setCorrectAnswer(null);
     setTimer(9);
     setOpponentAnswered(false);
-  }, [currentQ]);
+  }, [currentQuestionIndex]);
+
+  // Show "Both correct!" banner when server signals it
+  useEffect(() => {
+    if (bothCorrectFeedback) {
+      setBothCorrectMsg('Both correct! Next question...');
+      const t = setTimeout(() => setBothCorrectMsg(null), 2000);
+      return () => clearTimeout(t);
+    }
+  }, [bothCorrectFeedback, currentQuestionIndex]);
 
   // Timer countdown
   useEffect(() => {
@@ -317,18 +326,12 @@ function TournamentMatch({ questions, opponent, round, username, matchId, onAnsw
       setShowResult(true);
       const won = data.result === 'win' || data.myAnswer === data.correctAnswer;
       if (won) playCorrect(); else playWrong();
-      // Advance to next question after 2.5s unless the match is over
-      if (!data.matchOver) {
-        setTimeout(() => {
-          const next = currentQ + 1;
-          if (next < questions.length) setCurrentQ(next);
-        }, 2500);
-      }
+      // NOTE: question advancement is now handled by 'next_question' server event
       // If matchOver, parent handles phase change via tournament_round_won / tournament_eliminated
     };
     socket.on('round_result', handler);
     return () => socket.off('round_result', handler);
-  }, [currentQ, questions.length]);
+  }, [currentQuestionIndex]);
 
   const handleAnswer = (optionKey) => {
     if (showResult || selected !== null) return;
@@ -349,10 +352,23 @@ function TournamentMatch({ questions, opponent, round, username, matchId, onAnsw
 
   // Use correctAnswer from server (round_result) if available, fall back to q.correct
   const correctKey = correctAnswer ?? q.correct;
+  const displayTotal = totalQuestions || questions.length;
 
   return (
     <div className="fixed inset-0 z-40 flex flex-col items-center justify-center p-4"
       style={{ background: 'linear-gradient(160deg, rgba(10,5,30,0.97) 0%, rgba(50,5,40,0.97) 100%)' }}>
+
+      {/* Both correct banner */}
+      {bothCorrectMsg && (
+        <div className="fixed inset-x-0 top-0 z-50 flex justify-center p-4 pt-6 pointer-events-none">
+          <div className="flex items-center gap-2 px-5 py-2.5 rounded-2xl shadow-2xl"
+            style={{ background: 'linear-gradient(135deg, #16a34a, #15803d)', boxShadow: '0 0 30px rgba(22,163,74,0.5)' }}>
+            <CheckCircle2 className="w-4 h-4 text-green-200" />
+            <span className="text-white font-black text-sm">{bothCorrectMsg}</span>
+          </div>
+        </div>
+      )}
+
       <div className="w-full max-w-md">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
@@ -370,9 +386,9 @@ function TournamentMatch({ questions, opponent, round, username, matchId, onAnsw
         {/* Progress + Timer */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex gap-1.5">
-            {questions.map((_, i) => (
+            {Array.from({ length: displayTotal }).map((_, i) => (
               <div key={i} className={`h-1.5 rounded-full flex-1 ${
-                i < currentQ ? 'bg-green-500' : i === currentQ ? 'bg-amber-500' : 'bg-gray-700'
+                i < currentQuestionIndex ? 'bg-green-500' : i === currentQuestionIndex ? 'bg-amber-500' : 'bg-gray-700'
               }`} style={{ minWidth: '24px' }} />
             ))}
           </div>
@@ -397,7 +413,7 @@ function TournamentMatch({ questions, opponent, round, username, matchId, onAnsw
         {/* Question Card */}
         <div className="rounded-3xl p-6 mb-4"
           style={{ background: 'rgba(10,5,30,0.9)', border: '1px solid rgba(251,191,36,0.25)', backdropFilter: 'blur(20px)' }}>
-          <p className="text-amber-400 text-xs uppercase tracking-wider mb-2">Question {currentQ + 1} of {questions.length}</p>
+          <p className="text-amber-400 text-xs uppercase tracking-wider mb-2">Question {currentQuestionIndex + 1} of {displayTotal}</p>
           <h2 className="text-lg font-bold text-white leading-relaxed">{q.question}</h2>
         </div>
 
@@ -811,6 +827,9 @@ export default function SpecialScreen() {
         {tournament.countdownWarning && <TournamentCountdownBanner message={tournament.countdownWarning} />}
         <TournamentMatch
           questions={tournament.matchQuestions}
+          currentQuestionIndex={tournament.currentQuestionIndex}
+          totalQuestions={tournament.totalQuestions}
+          bothCorrectFeedback={tournament.bothCorrectFeedback}
           opponent={tournament.opponent}
           round={tournament.round}
           username={username || state.username}
