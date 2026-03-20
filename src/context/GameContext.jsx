@@ -652,6 +652,36 @@ export function GameProvider({ children }) {
       dispatch({ type: 'STATE_SYNC', payload: data });
     };
     socket.on('state_sync', onStateSync);
+    
+    // Match reconnected — player was restored to their active match after disconnect
+    const onMatchReconnected = (data) => {
+      console.log('[socket] match_reconnected', data);
+      // Restore tournament match state
+      if (data.isTournament) {
+        dispatch({ 
+          type: ACTIONS.TOURNAMENT_MATCH_FOUND, 
+          payload: {
+            matchId: data.matchId,
+            questions: data.questions,
+            opponent: data.opponent,
+            round: data.round,
+            totalQuestions: data.totalQuestions,
+          }
+        });
+        // If we had already answered, restore that
+        if (data.myAnswer !== null) {
+          dispatch({ type: ACTIONS.TOURNAMENT_SUBMIT_ANSWER, payload: { answer: data.myAnswer } });
+        }
+      }
+    };
+    socket.on('match_reconnected', onMatchReconnected);
+    
+    // Opponent reconnected notification
+    const onOpponentReconnected = ({ matchId }) => {
+      console.log('[socket] opponent reconnected to', matchId);
+      // Could show a toast notification here
+    };
+    socket.on('opponent_reconnected', onOpponentReconnected);
 
     // Fetch initial special session state
     fetch(`${BASE_URL}/admin/special-session`)
@@ -686,6 +716,8 @@ export function GameProvider({ children }) {
       socket.off('force_reload',              onForceReload);
       socket.off('special_session_updated',   onSpecialSessionUpdated);
       socket.off('state_sync',                onStateSync);
+      socket.off('match_reconnected',         onMatchReconnected);
+      socket.off('opponent_reconnected',      onOpponentReconnected);
     };
   }, []);
 

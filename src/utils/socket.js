@@ -6,10 +6,16 @@ const SERVER_URL = import.meta.env.VITE_SERVER_URL || BASE_URL;
 const socket = io(SERVER_URL, {
   autoConnect: false,
   reconnection: true,
-  reconnectionAttempts: Infinity, // Keep trying
+  reconnectionAttempts: Infinity, // Keep trying forever
   reconnectionDelay: 1000,
   reconnectionDelayMax: 5000,
-  timeout: 10000,
+  timeout: 30000,                 // Increased timeout for slow networks
+  // Try websocket first, fall back to polling if blocked
+  transports: ['websocket', 'polling'],
+  // Upgrade from polling to websocket when possible
+  upgrade: true,
+  // Force new connection on reconnect (helps with stale connections)
+  forceNew: false,
 });
 
 // ─── Connection state tracking ───────────────────────────────────────────────
