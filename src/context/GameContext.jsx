@@ -379,7 +379,42 @@ function gameReducer(state, action) {
       return { ...state, tournamentStarted: true, tournament: { ...state.tournament, phase: 'waiting_match', bibleQuestions: action.payload.bibleQuestions || [], playerCount: action.payload.playerCount || 0, round: action.payload.round || 1, questionsPerMatch: action.payload.questionsPerMatch || 5, countdownWarning: null } };
 
     case ACTIONS.TOURNAMENT_MATCH_FOUND:
-      return { ...state, tournament: { ...state.tournament, phase: 'in_match', matchId: action.payload.matchId, matchQuestions: action.payload.questions || [], currentQuestionIndex: 0, opponent: action.payload.opponent, myAnswer: null, roundResult: null, round: action.payload.round || state.tournament.round, totalQuestions: action.payload.totalQuestions || action.payload.questions?.length || state.tournament.questionsPerMatch, bothCorrectFeedback: false } };
+      return { 
+        ...state, 
+        tournament: { 
+          ...state.tournament, 
+          phase: 'pre_match', // Start with pre-match countdown
+          matchId: action.payload.matchId, 
+          matchQuestions: action.payload.questions || [], 
+          currentQuestionIndex: 0, 
+          opponent: action.payload.opponent, 
+          myAnswer: null, 
+          roundResult: null, 
+          round: action.payload.round || state.tournament.round, 
+          totalQuestions: action.payload.totalQuestions || action.payload.questions?.length || state.tournament.questionsPerMatch, 
+          bothCorrectFeedback: false,
+          preMatchCountdown: action.payload.preMatchCountdown || 5,
+        } 
+      };
+
+    case 'TOURNAMENT_PRE_MATCH_TICK':
+      return { 
+        ...state, 
+        tournament: { 
+          ...state.tournament, 
+          preMatchCountdown: action.payload.countdown 
+        } 
+      };
+
+    case 'TOURNAMENT_MATCH_START':
+      return { 
+        ...state, 
+        tournament: { 
+          ...state.tournament, 
+          phase: 'in_match',
+          preMatchCountdown: 0,
+        } 
+      };
 
     case ACTIONS.TOURNAMENT_SUBMIT_ANSWER:
       return { ...state, tournament: { ...state.tournament, myAnswer: action.payload.answer } };
@@ -581,10 +616,32 @@ export function GameProvider({ children }) {
       dispatch({ type: 'TOURNAMENT_STARTED' });
     };
 
-    const onTournamentMatchFound = ({ matchId, questions, opponent, you, round, totalQuestions, isTournament }) => {
+    const onTournamentMatchFound = ({ matchId, questions, opponent, you, round, totalQuestions, isTournament, preMatchCountdown }) => {
       if (!isTournament) return; // handled by the normal match_found listener above
       const opp = opponent ?? {};
-      dispatch({ type: ACTIONS.TOURNAMENT_MATCH_FOUND, payload: { matchId, questions: questions || [], opponent: { username: opp.username, id: opp.id || opp.deviceId }, round: round || 1, totalQuestions: totalQuestions || questions?.length || 5 } });
+      const countdown = preMatchCountdown || 5; // Default to 5 seconds if not provided
+      dispatch({ 
+        type: ACTIONS.TOURNAMENT_MATCH_FOUND, 
+        payload: { 
+          matchId, 
+          questions: questions || [], 
+          opponent: { username: opp.username, id: opp.id || opp.deviceId }, 
+          round: round || 1, 
+          totalQuestions: totalQuestions || questions?.length || 5,
+          preMatchCountdown: countdown,
+        } 
+      });
+      
+      // Start pre-match countdown
+      let count = countdown;
+      const tick = setInterval(() => {
+        count--;
+        dispatch({ type: 'TOURNAMENT_PRE_MATCH_TICK', payload: { countdown: count } });
+        if (count <= 0) {
+          clearInterval(tick);
+          dispatch({ type: 'TOURNAMENT_MATCH_START' });
+        }
+      }, 1000);
     };
 
     const onTournamentRoundResult = ({ result, questionIndex, correctAnswer, myAnswer, opponentAnswer, matchOver }) => {

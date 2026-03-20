@@ -943,6 +943,57 @@ export default function SpecialScreen() {
     return <TournamentEliminated username={username || state.username} />;
   }
 
+  // Pre-match countdown (Get Ready!)
+  if (tournament.phase === 'pre_match') {
+    return (
+      <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center">
+        {/* Stars background */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          {[...Array(100)].map((_, i) => (
+            <div
+              key={i}
+              className="absolute w-1 h-1 bg-white rounded-full animate-twinkle"
+              style={{
+                top: `${Math.random() * 100}%`,
+                left: `${Math.random() * 100}%`,
+                animationDelay: `${Math.random() * 3}s`,
+                opacity: 0.3 + Math.random() * 0.7,
+              }}
+            />
+          ))}
+        </div>
+        
+        <div className="relative z-10 text-center px-6">
+          {/* Round badge */}
+          <div className="mb-6">
+            <span className="inline-block px-6 py-2 rounded-full bg-gradient-to-r from-yellow-500 to-orange-500 text-white font-bold text-lg shadow-lg">
+              Round {tournament.round}
+            </span>
+          </div>
+          
+          {/* VS Display */}
+          <div className="mb-8">
+            <div className="text-3xl font-bold text-white mb-2">{username || state.username}</div>
+            <div className="text-4xl font-black text-yellow-400 my-4 animate-pulse">VS</div>
+            <div className="text-3xl font-bold text-white">{tournament.opponent?.username || 'Opponent'}</div>
+          </div>
+          
+          {/* Get Ready countdown */}
+          <div className="mb-4">
+            <div className="text-2xl text-white/90 mb-4">Get Ready!</div>
+            <div className="text-8xl font-black text-yellow-400 animate-bounce">
+              {tournament.preMatchCountdown || '...'}
+            </div>
+          </div>
+          
+          <div className="text-white/70 text-lg mt-8">
+            {tournament.totalQuestions} questions • Answer fast & correct to win!
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Active match
   if (tournament.phase === 'in_match' && tournament.matchQuestions.length > 0) {
     return (
