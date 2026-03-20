@@ -96,7 +96,7 @@ const initialState = {
 
   // ── Tournament ──────────────────────────────────────────────────────────────
   tournament: {
-    phase: 'idle',           // idle | countdown_warning | waiting_match | in_match | round_won | eliminated | champion
+    phase: 'idle',           // idle | countdown_warning | waiting_match | in_match | round_won | bye | eliminated | champion
     countdownWarning: null,  // e.g. '5 minutes to go!'
     round: 1,
     matchId: null,           // current match ID (needed for submit_answer)
@@ -148,6 +148,7 @@ const ACTIONS = {
   TOURNAMENT_NEXT_ROUND: 'TOURNAMENT_NEXT_ROUND',
   TOURNAMENT_CHAMPION: 'TOURNAMENT_CHAMPION',
   TOURNAMENT_NEXT_QUESTION: 'TOURNAMENT_NEXT_QUESTION',
+  TOURNAMENT_BYE: 'TOURNAMENT_BYE',
 };
 
 function gameReducer(state, action) {
@@ -423,6 +424,9 @@ function gameReducer(state, action) {
     case ACTIONS.TOURNAMENT_ROUND_RESULT:
       return { ...state, tournament: { ...state.tournament, roundResult: action.payload, bothCorrectFeedback: false } };
 
+    case ACTIONS.TOURNAMENT_BYE:
+      return { ...state, tournament: { ...state.tournament, phase: 'bye', byeMessage: action.payload.message, round: action.payload.round || state.tournament.round } };
+
     case ACTIONS.TOURNAMENT_ROUND_WON:
       return { ...state, tournament: { ...state.tournament, phase: 'round_won', round: action.payload.nextRound || state.tournament.round + 1 } };
 
@@ -666,6 +670,11 @@ export function GameProvider({ children }) {
       dispatch({ type: ACTIONS.TOURNAMENT_ROUND_RESULT, payload: { result, questionIndex, correctAnswer, myAnswer, opponentAnswer, matchOver } });
     };
 
+    const onTournamentBye = ({ message, username, round }) => {
+      console.log('[TOURNAMENT] bye:', { message, username, round });
+      dispatch({ type: ACTIONS.TOURNAMENT_BYE, payload: { message, round } });
+    };
+
     const onTournamentRoundWon = ({ nextRound, round }) => {
       console.log('[TOURNAMENT] round_won:', { nextRound, round });
       dispatch({ type: ACTIONS.TOURNAMENT_ROUND_WON, payload: { nextRound: nextRound || round } });
@@ -716,6 +725,7 @@ export function GameProvider({ children }) {
     socket.on('tournament_started',     onTournamentStartedFull);
     socket.on('match_found',            (data) => { if (data.isTournament) onTournamentMatchFound(data); else onMatchFound(data); });
     socket.on('round_result',           (data) => { if (data.isTournament) onTournamentRoundResult(data); else onRoundResult(data); });
+    socket.on('tournament_bye',         onTournamentBye);
     socket.on('tournament_round_won',   onTournamentRoundWon);
     socket.on('tournament_eliminated',  onTournamentEliminated);
     socket.on('tournament_next_round',  onTournamentNextRound);
@@ -808,6 +818,7 @@ export function GameProvider({ children }) {
       socket.off('tournament_countdown',  onTournamentCountdown);
       socket.off('tournament_grace_period', onTournamentGracePeriod);
       socket.off('tournament_started',    onTournamentStartedFull);
+      socket.off('tournament_bye',        onTournamentBye);
       socket.off('tournament_round_won',  onTournamentRoundWon);
       socket.off('tournament_eliminated', onTournamentEliminated);
       socket.off('tournament_next_round', onTournamentNextRound);

@@ -556,6 +556,30 @@ function TournamentRoundWon({ round }) {
   );
 }
 
+// ── Tournament: Bye overlay ───────────────────────────────────────────────────
+function TournamentBye({ round, message }) {
+  return (
+    <div className="fixed inset-0 z-40 flex flex-col items-center justify-center p-4"
+      style={{ background: 'linear-gradient(160deg, rgba(10,10,30,0.97) 0%, rgba(20,15,50,0.97) 100%)' }}>
+      <div className="text-center">
+        <div className="w-28 h-28 mx-auto mb-6 rounded-full flex items-center justify-center"
+          style={{ background: 'linear-gradient(135deg, #a855f7, #7c3aed)', boxShadow: '0 0 60px rgba(168,85,247,0.6)' }}>
+          <ArrowRight className="w-14 h-14 text-white" />
+        </div>
+        <h2 className="text-4xl font-black text-purple-400 mb-2">Free Pass!</h2>
+        <p className="text-white text-lg mb-2">{message || 'You got a bye this round!'}</p>
+        <p className="text-gray-400 mb-6">Advancing automatically to the next round…</p>
+        <div className="flex justify-center gap-2">
+          {[0,1,2].map(i => (
+            <div key={i} className="w-3 h-3 rounded-full bg-purple-400 animate-bounce"
+              style={{ animationDelay: `${i * 0.15}s` }} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Tournament: Eliminated overlay ────────────────────────────────────────────
 function TournamentEliminated({ username }) {
   return (
@@ -1093,6 +1117,11 @@ export default function SpecialScreen() {
   // Round won — waiting for next round
   if (tournament.phase === 'round_won') {
     return <TournamentRoundWon round={tournament.round} />;
+  }
+
+  // Bye — advancing automatically
+  if (tournament.phase === 'bye') {
+    return <TournamentBye round={tournament.round} message={tournament.byeMessage} />;
   }
 
   // Waiting to be paired
