@@ -682,6 +682,19 @@ export function GameProvider({ children }) {
       // Could show a toast notification here
     };
     socket.on('opponent_reconnected', onOpponentReconnected);
+    
+    // Tournament state guards - handle late joiners / eliminated players
+    const onTournamentInProgress = ({ message }) => {
+      console.log('[socket] tournament_in_progress:', message);
+      // Could show a message that tournament is already running
+    };
+    socket.on('tournament_in_progress', onTournamentInProgress);
+    
+    const onTournamentEndedInfo = ({ message, championUsername }) => {
+      console.log('[socket] tournament_ended_info:', championUsername);
+      dispatch({ type: 'TOURNAMENT_ENDED', payload: { username: championUsername } });
+    };
+    socket.on('tournament_ended_info', onTournamentEndedInfo);
 
     // Fetch initial special session state
     fetch(`${BASE_URL}/admin/special-session`)
@@ -718,6 +731,8 @@ export function GameProvider({ children }) {
       socket.off('state_sync',                onStateSync);
       socket.off('match_reconnected',         onMatchReconnected);
       socket.off('opponent_reconnected',      onOpponentReconnected);
+      socket.off('tournament_in_progress',    onTournamentInProgress);
+      socket.off('tournament_ended_info',     onTournamentEndedInfo);
     };
   }, []);
 
