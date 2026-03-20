@@ -304,7 +304,11 @@ function TournamentMatch({ questions, currentQuestionIndex, totalQuestions, oppo
   // Timer countdown
   useEffect(() => {
     if (showResult) return;
-    if (timer <= 0) { handleAnswer(null); return; }
+    if (timer <= 0) { 
+      console.log('[TournamentMatch] Timer expired, auto-submitting null answer');
+      handleAnswer(null); 
+      return; 
+    }
     if (timer <= 3) playUrgentTick(); else playTick();
     const t = setTimeout(() => setTimer(t => t - 1), 1000);
     return () => clearTimeout(t);
@@ -312,7 +316,10 @@ function TournamentMatch({ questions, currentQuestionIndex, totalQuestions, oppo
 
   // Listen for opponent answered signal
   useEffect(() => {
-    const handler = () => setOpponentAnswered(true);
+    const handler = () => {
+      console.log('[TournamentMatch] opponent_answered received');
+      setOpponentAnswered(true);
+    };
     socket.on('opponent_answered', handler);
     return () => socket.off('opponent_answered', handler);
   }, []);
@@ -322,6 +329,7 @@ function TournamentMatch({ questions, currentQuestionIndex, totalQuestions, oppo
   // We show the correct answer for 1.5 s so the player sees feedback before the reset.
   useEffect(() => {
     const handler = (data) => {
+      console.log('[TournamentMatch] next_question received:', { isTournament: data.isTournament, questionIndex: data.questionIndex, currentQuestionIndex });
       if (!data.isTournament) return;
       // Show correct answer highlight + play sound
       setCorrectAnswer(data.question?.correct ?? null);
@@ -341,6 +349,7 @@ function TournamentMatch({ questions, currentQuestionIndex, totalQuestions, oppo
   // Parent transitions the phase via tournament_round_won / tournament_eliminated.
   useEffect(() => {
     const handler = (data) => {
+      console.log('[TournamentMatch] round_result received:', { isTournament: data.isTournament, result: data.result, matchOver: data.matchOver, correctAnswer: data.correctAnswer });
       if (!data.isTournament) return;
       setCorrectAnswer(data.correctAnswer ?? null);
       setShowResult(true);
@@ -353,6 +362,7 @@ function TournamentMatch({ questions, currentQuestionIndex, totalQuestions, oppo
   }, [currentQuestionIndex]);
 
   const handleAnswer = (optionKey) => {
+    console.log('[TournamentMatch] handleAnswer:', { optionKey, questionId: q?.id, matchId, timer, selected, showResult });
     if (showResult || selected !== null) return;
     playClick();
     setSelected(optionKey);

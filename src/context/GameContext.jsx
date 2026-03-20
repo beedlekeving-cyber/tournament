@@ -621,6 +621,7 @@ export function GameProvider({ children }) {
     };
 
     const onTournamentMatchFound = ({ matchId, questions, opponent, you, round, totalQuestions, isTournament, preMatchCountdown }) => {
+      console.log('[TOURNAMENT] match_found:', { matchId, round, totalQuestions, opponent: opponent?.username, preMatchCountdown, questionsCount: questions?.length });
       if (!isTournament) return; // handled by the normal match_found listener above
       const opp = opponent ?? {};
       const countdown = preMatchCountdown || 5; // Default to 5 seconds if not provided
@@ -649,24 +650,29 @@ export function GameProvider({ children }) {
     };
 
     const onTournamentRoundResult = ({ result, questionIndex, correctAnswer, myAnswer, opponentAnswer, matchOver }) => {
+      console.log('[TOURNAMENT] round_result:', { result, questionIndex, correctAnswer, myAnswer, opponentAnswer, matchOver });
       dispatch({ type: ACTIONS.TOURNAMENT_ROUND_RESULT, payload: { result, questionIndex, correctAnswer, myAnswer, opponentAnswer, matchOver } });
     };
 
     const onTournamentRoundWon = ({ nextRound, round }) => {
+      console.log('[TOURNAMENT] round_won:', { nextRound, round });
       dispatch({ type: ACTIONS.TOURNAMENT_ROUND_WON, payload: { nextRound: nextRound || round } });
     };
 
     const onTournamentEliminated = () => {
+      console.log('[TOURNAMENT] eliminated');
       dispatch({ type: ACTIONS.TOURNAMENT_ELIMINATED });
     };
 
     const onTournamentNextRound = ({ round, questionsPerMatch }) => {
+      console.log('[TOURNAMENT] next_round:', { round, questionsPerMatch });
       dispatch({ type: ACTIONS.TOURNAMENT_NEXT_ROUND, payload: { round, questionsPerMatch } });
     };
 
     // next_question: server says both players answered correctly — move to next question.
     // Delay the dispatch by 1.5 s so TournamentMatch can show the answer reveal first.
     const onNextQuestion = ({ questionIndex, question, bothCorrectCount, message, totalQuestions }) => {
+      console.log('[TOURNAMENT] next_question:', { questionIndex, bothCorrectCount, totalQuestions, message });
       setTimeout(() => {
         dispatch({ type: ACTIONS.TOURNAMENT_NEXT_QUESTION, payload: { questionIndex, question, bothCorrectCount, message, totalQuestions } });
       }, 1500);
@@ -677,6 +683,7 @@ export function GameProvider({ children }) {
     const onTournamentChampion = ({ username, deviceId }) => {
       // Check if WE are the champion
       const myDeviceId = localStorage.getItem('qd_deviceId');
+      console.log('[TOURNAMENT] tournament_champion:', { username, deviceId, myDeviceId, isMe: deviceId === myDeviceId });
       if (deviceId === myDeviceId) {
         // We are the champion! (This is redundant if you_are_champion also fires, but handles edge cases)
         dispatch({ type: ACTIONS.TOURNAMENT_CHAMPION });
@@ -688,6 +695,7 @@ export function GameProvider({ children }) {
 
     const onYouAreChampion = () => {
       // This is the definitive "you won" event
+      console.log('[TOURNAMENT] you_are_champion!');
       dispatch({ type: ACTIONS.TOURNAMENT_CHAMPION });
     };
 
@@ -965,6 +973,7 @@ export function GameProvider({ children }) {
 
   const submitTournamentAnswer = useCallback((answer, questionId, matchId, timeLeft) => {
     const deviceId = getDeviceId();
+    console.log('[TOURNAMENT] submitAnswer:', { answer, questionId, matchId, timeLeft, deviceId });
     dispatch({ type: ACTIONS.TOURNAMENT_SUBMIT_ANSWER, payload: { answer } });
     socket.emit('submit_answer', {
       answer,
