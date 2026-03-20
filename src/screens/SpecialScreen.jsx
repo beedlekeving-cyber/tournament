@@ -324,22 +324,25 @@ function TournamentMatch({ questions, currentQuestionIndex, totalQuestions, oppo
     return () => socket.off('opponent_answered', handler);
   }, []);
 
-  // next_question: BOTH players answered correctly — show green reveal briefly, then
+  // next_question: server says both answered the same (correct or wrong) — show feedback briefly, then
   // the context dispatch (already wired in GameContext) advances currentQuestionIndex.
-  // We show the correct answer for 1.5 s so the player sees feedback before the reset.
   useEffect(() => {
     const handler = (data) => {
-      console.log('[TournamentMatch] next_question received:', { isTournament: data.isTournament, questionIndex: data.questionIndex, currentQuestionIndex });
+      console.log('[TournamentMatch] next_question received:', { isTournament: data.isTournament, questionIndex: data.questionIndex, currentQuestionIndex, bothWrongCount: data.bothWrongCount });
       if (!data.isTournament) return;
-      // Highlight the CURRENT question's correct answer (not the next question's)
-      // Both players answered correctly, so q.correct is what should be highlighted green
-      setCorrectAnswer(q?.correct ?? null);
-      setShowResult(true);
-      playCorrect();
-      setBothCorrectMsg(data.message || 'Both correct! Next question...');
-      // After 1.5 s clear the banner (the context dispatch will have already
-      // advanced currentQuestionIndex, which resets selected/showResult/timer)
-      setTimeout(() => setBothCorrectMsg(null), 1500);
+      
+      if (data.bothWrongCount) {
+        // Both wrong → already showing red from round_result, just show message
+        setBothCorrectMsg(data.message || 'Both wrong! Try again...');
+        setTimeout(() => setBothCorrectMsg(null), 1500);
+      } else {
+        // Both correct → highlight green and play correct sound
+        setCorrectAnswer(q?.correct ?? null);
+        setShowResult(true);
+        playCorrect();
+        setBothCorrectMsg(data.message || 'Both correct! Next question...');
+        setTimeout(() => setBothCorrectMsg(null), 1500);
+      }
     };
     socket.on('next_question', handler);
     return () => socket.off('next_question', handler);

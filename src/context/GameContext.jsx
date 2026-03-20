@@ -690,13 +690,16 @@ export function GameProvider({ children }) {
       dispatch({ type: ACTIONS.TOURNAMENT_NEXT_ROUND, payload: { round, questionsPerMatch } });
     };
 
-    // next_question: server says both players answered correctly — move to next question.
+    // next_question: server says both players answered the same — move to next question.
     // Delay the dispatch by 1.5 s so TournamentMatch can show the answer reveal first.
-    const onNextQuestion = ({ questionIndex, question, bothCorrectCount, message, totalQuestions }) => {
-      console.log('[TOURNAMENT] next_question:', { questionIndex, bothCorrectCount, totalQuestions, message });
+    const onNextQuestion = ({ questionIndex, question, bothCorrectCount, bothWrongCount, message, totalQuestions }) => {
+      console.log('[TOURNAMENT] next_question:', { questionIndex, bothCorrectCount, bothWrongCount, totalQuestions, message });
+      // For both_wrong, the server already delayed 2s before sending next_question,
+      // so we use a shorter dispatch delay
+      const delayMs = bothWrongCount ? 500 : 1500;
       setTimeout(() => {
         dispatch({ type: ACTIONS.TOURNAMENT_NEXT_QUESTION, payload: { questionIndex, question, bothCorrectCount, message, totalQuestions } });
-      }, 1500);
+      }, delayMs);
     };
 
     // tournament_champion: broadcast to everyone when a champion is declared
