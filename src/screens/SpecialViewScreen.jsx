@@ -604,10 +604,12 @@ export default function SpecialViewScreen({ embedded = false }) {
     });
     sock.on('disconnect', () => setConnected(false));
 
-    sock.on('view_state', ({ matches: m, players: p, lobbyCount: lc }) => {
+    sock.on('view_state', ({ matches: m, players: p, lobbyCount: lc, registeredCount: rc }) => {
       if (m) setMatches(Object.values(m));
       if (p) setPlayers(p);
-      if (lc !== undefined) setLobbyCount(lc);
+      // Use registered count if available (tournament mode), else lobby count
+      if (rc !== undefined && rc > 0) setLobbyCount(rc);
+      else if (lc !== undefined) setLobbyCount(lc);
     });
 
     sock.on('match_update', ({ matchId, players: mp }) => {
@@ -643,9 +645,7 @@ export default function SpecialViewScreen({ embedded = false }) {
         setHype(true);
         setTimeout(() => setHype(false), 1000);
       }
-      setPlayers(prev =>
-        prev.map(p => p.username === winner ? { ...p, wins: (p.wins || 0) + 1 } : p)
-      );
+      // Note: wins are updated via leaderboard_update event (avoid double-counting)
     });
 
     sock.on('both_correct', ({ p1, p2 }) => {
@@ -655,8 +655,9 @@ export default function SpecialViewScreen({ embedded = false }) {
       setTimeout(() => setHype(false), 1000);
     });
 
-    sock.on('player_joined', ({ username, lobbyCount: lc }) => {
-      setLobbyCount(lc);
+    sock.on('player_joined', ({ username, lobbyCount: lc, waitingCount: wc }) => {
+      const count = lc ?? wc;
+      if (count !== undefined) setLobbyCount(count);
       addActivity('joined', { username });
       setPlayers(prev => {
         if (prev.find(p => p.username === username)) return prev;
@@ -820,25 +821,21 @@ export default function SpecialViewScreen({ embedded = false }) {
 
             {matches.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-48 text-center">
-                <div className="text-5xl mb-3" style={{ animation: 'bounce 1s infinite', filter: 'drop-shadow(0 0 16px rgba(251,191,36,0.6))' }}>swords</div>
+                <div className="text-5xl mb-3" style={{ animation: 'bounce 1s infinite', filter: 'drop-shadow(0 0 16px rgba(251,191,36,0.6))' }}>⚔️</div>
                 <p className="text-amber-300 font-black text-lg">
-                  {lobbyCount < 10
-                    ? `Waiting for ${10 - lobbyCount} more player${10 - lobbyCount !== 1 ? 's' : ''}...`
+                  {lobbyCount < 2
+                    ? 'Waiting for players to join...'
                     : 'Tournament starting...'}
                 </p>
-                <p className="text-gray-500 text-xs mt-1">{lobbyCount}/10 ready</p>
+                <p className="text-gray-500 text-xs mt-1">{lobbyCount} player{lobbyCount !== 1 ? 's' : ''} ready</p>
                 {/* Lobby player dots */}
                 {lobbyCount > 0 && (
                   <div className="flex items-center gap-2 mt-4 flex-wrap justify-center">
-                    {[...Array(Math.min(lobbyCount, 10))].map((_, i) => (
+                    {[...Array(Math.min(lobbyCount, 20))].map((_, i) => (
                       <div key={i} className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black text-white animate-pulse"
                         style={{ background: 'rgba(167,139,250,0.3)', border: '1px solid rgba(167,139,250,0.5)', animationDelay: `${i * 0.1}s` }}>
                         {players[i]?.username?.[0]?.toUpperCase() || '?'}
                       </div>
-                    ))}
-                    {lobbyCount < 10 && [...Array(10 - lobbyCount)].map((_, i) => (
-                      <div key={'empty' + i} className="w-8 h-8 rounded-xl"
-                        style={{ background: 'rgba(255,255,255,0.04)', border: '1px dashed rgba(255,255,255,0.15)' }} />
                     ))}
                   </div>
                 )}
