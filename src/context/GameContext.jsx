@@ -394,6 +394,7 @@ function gameReducer(state, action) {
           totalQuestions: action.payload.totalQuestions || action.payload.questions?.length || state.tournament.questionsPerMatch, 
           bothCorrectFeedback: false,
           preMatchCountdown: action.payload.preMatchCountdown || 5,
+          questionTime: action.payload.questionTime || 15,
         } 
       };
 
@@ -630,8 +631,8 @@ export function GameProvider({ children }) {
       dispatch({ type: 'TOURNAMENT_STARTED' });
     };
 
-    const onTournamentMatchFound = ({ matchId, questions, opponent, you, round, totalQuestions, isTournament, preMatchCountdown }) => {
-      console.log('[TOURNAMENT] match_found:', { matchId, round, totalQuestions, opponent: opponent?.username, preMatchCountdown, questionsCount: questions?.length });
+    const onTournamentMatchFound = ({ matchId, questions, opponent, you, round, totalQuestions, isTournament, preMatchCountdown, questionTime }) => {
+      console.log('[TOURNAMENT] match_found:', { matchId, round, totalQuestions, opponent: opponent?.username, preMatchCountdown, questionTime, questionsCount: questions?.length });
       if (!isTournament) return; // handled by the normal match_found listener above
       const opp = opponent ?? {};
       const countdown = preMatchCountdown || 5; // Default to 5 seconds if not provided
@@ -644,6 +645,7 @@ export function GameProvider({ children }) {
           round: round || 1, 
           totalQuestions: totalQuestions || questions?.length || 5,
           preMatchCountdown: countdown,
+          questionTime: questionTime || 15,
         } 
       });
       

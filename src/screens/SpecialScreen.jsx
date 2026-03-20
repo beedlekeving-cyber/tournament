@@ -273,11 +273,11 @@ function DemoQuiz({ onClose, questions }) {
 }
 
 // ── Tournament: Live Match Component ─────────────────────────────────────────
-function TournamentMatch({ questions, currentQuestionIndex, totalQuestions, opponent, round, username, matchId, bothCorrectFeedback, onAnswered }) {
+function TournamentMatch({ questions, currentQuestionIndex, totalQuestions, opponent, round, username, matchId, bothCorrectFeedback, onAnswered, questionTime }) {
   const [selected, setSelected] = useState(null);
   const [showResult, setShowResult] = useState(false);
   const [correctAnswer, setCorrectAnswer] = useState(null);
-  const [timer, setTimer] = useState(9);
+  const [timer, setTimer] = useState(questionTime ? questionTime - 1 : 14);
   const [opponentAnswered, setOpponentAnswered] = useState(false);
   const [bothCorrectMsg, setBothCorrectMsg] = useState(null);
 
@@ -288,9 +288,9 @@ function TournamentMatch({ questions, currentQuestionIndex, totalQuestions, oppo
     setSelected(null);
     setShowResult(false);
     setCorrectAnswer(null);
-    setTimer(9);
+    setTimer(questionTime ? questionTime - 1 : 14);
     setOpponentAnswered(false);
-  }, [currentQuestionIndex]);
+  }, [currentQuestionIndex, questionTime]);
 
   // Show "Both correct!" banner when server signals it
   useEffect(() => {
@@ -1082,6 +1082,7 @@ export default function SpecialScreen() {
           round={tournament.round}
           username={username || state.username}
           matchId={tournament.matchId}
+          questionTime={tournament.questionTime || 15}
           onAnswered={(answer, questionId, matchId, timeLeft) => submitTournamentAnswer(answer, questionId, matchId, timeLeft)}
         />
       </>
