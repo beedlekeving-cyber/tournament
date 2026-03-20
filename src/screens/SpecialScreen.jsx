@@ -599,6 +599,34 @@ function TournamentChampion({ username }) {
   );
 }
 
+// ── Tournament Ended: Someone else won ────────────────────────────────────────
+function TournamentEnded({ championUsername, myUsername }) {
+  return (
+    <div className="fixed inset-0 z-40 flex flex-col items-center justify-center p-4"
+      style={{ background: 'linear-gradient(160deg, rgba(10,10,30,0.97) 0%, rgba(20,20,50,0.97) 100%)' }}>
+      <div className="text-center w-full max-w-sm">
+        {/* Trophy icon */}
+        <div className="relative inline-flex items-center justify-center mb-6">
+          <div className="w-24 h-24 rounded-full flex items-center justify-center"
+            style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', boxShadow: '0 0 40px rgba(99,102,241,0.5)' }}>
+            <Trophy className="w-12 h-12 text-white" />
+          </div>
+        </div>
+        <h2 className="text-3xl font-black mb-3 text-white">
+          Tournament Complete!
+        </h2>
+        <p className="text-indigo-200 text-lg font-bold mb-2">🏆 Champion: {championUsername}</p>
+        <p className="text-gray-400 mb-6">Thanks for participating in the tournament!</p>
+        <div className="rounded-2xl p-5"
+          style={{ background: 'linear-gradient(135deg, rgba(99,102,241,0.15), rgba(139,92,246,0.15))', border: '1px solid rgba(99,102,241,0.4)' }}>
+          <p className="text-indigo-300 font-medium text-sm mb-1">Better luck next time, {myUsername}!</p>
+          <p className="text-gray-400 text-sm">Stay tuned for the next tournament.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function SpecialScreen() {
   const { joinLobby, state, dispatch, submitTournamentAnswer } = useGame();
   const tournament = state.tournament;
@@ -900,9 +928,14 @@ export default function SpecialScreen() {
   if (showSplash) return <SplashScreen onDone={() => setShowSplash(false)} />;
 
   // ─── TOURNAMENT LIVE PHASES ───────────────────────────────────────────────
-  // Champion
+  // Champion (you won!)
   if (tournament.phase === 'champion') {
-    return <TournamentChampion username={username || state.username} />;
+    return <TournamentChampion username={username || state.username} isChampion={true} />;
+  }
+
+  // Tournament ended (someone else won)
+  if (tournament.phase === 'tournament_ended') {
+    return <TournamentEnded championUsername={tournament.championUsername} myUsername={username || state.username} />;
   }
 
   // Eliminated

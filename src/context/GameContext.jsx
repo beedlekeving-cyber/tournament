@@ -397,7 +397,13 @@ function gameReducer(state, action) {
       return { ...state, tournament: { ...state.tournament, phase: 'waiting_match', currentQuestionIndex: 0, matchQuestions: [], opponent: null, myAnswer: null, roundResult: null, round: action.payload.round || state.tournament.round, questionsPerMatch: action.payload.questionsPerMatch || state.tournament.questionsPerMatch, bothCorrectFeedback: false } };
 
     case ACTIONS.TOURNAMENT_CHAMPION:
-      return { ...state, tournament: { ...state.tournament, phase: 'champion' } };
+      // This is for the actual champion (you_are_champion event)
+      return { ...state, tournament: { ...state.tournament, phase: 'champion', isChampion: true } };
+
+    case 'TOURNAMENT_ENDED':
+      // This is broadcast to everyone when a champion is declared
+      // Non-champions see this, champions see TOURNAMENT_CHAMPION
+      return { ...state, tournament: { ...state.tournament, phase: 'tournament_ended', championUsername: action.payload.username, isChampion: false } };
 
     case ACTIONS.TOURNAMENT_NEXT_QUESTION: {
       const { questionIndex, question, totalQuestions } = action.payload;
@@ -605,11 +611,22 @@ export function GameProvider({ children }) {
       }, 1500);
     };
 
-    const onTournamentChampion = () => {
-      dispatch({ type: ACTIONS.TOURNAMENT_CHAMPION });
+    // tournament_champion: broadcast to everyone when a champion is declared
+    // But only the actual champion should see the champion screen
+    const onTournamentChampion = ({ username, deviceId }) => {
+      // Check if WE are the champion
+      const myDeviceId = localStorage.getItem('qd_deviceId');
+      if (deviceId === myDeviceId) {
+        // We are the champion! (This is redundant if you_are_champion also fires, but handles edge cases)
+        dispatch({ type: ACTIONS.TOURNAMENT_CHAMPION });
+      } else {
+        // Someone else won - show tournament ended screen
+        dispatch({ type: 'TOURNAMENT_ENDED', payload: { username, deviceId } });
+      }
     };
 
     const onYouAreChampion = () => {
+      // This is the definitive "you won" event
       dispatch({ type: ACTIONS.TOURNAMENT_CHAMPION });
     };
 
