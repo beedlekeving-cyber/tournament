@@ -348,17 +348,25 @@ function TournamentMatch({ questions, currentQuestionIndex, totalQuestions, oppo
     return () => socket.off('next_question', handler);
   }, [currentQuestionIndex, q]);
 
-  // round_result: match is OVER (one wins, one loses, or both wrong).
-  // Just reveal the correct answer and play the appropriate sound.
-  // Parent transitions the phase via tournament_round_won / tournament_eliminated.
+  // round_result: match result for this question.
+  // For win/lose/gameover: reveal correct answer. For both_wrong: only show wrong highlight (match continues).
   useEffect(() => {
     const handler = (data) => {
       console.log('[TournamentMatch] round_result received:', { isTournament: data.isTournament, result: data.result, matchOver: data.matchOver, correctAnswer: data.correctAnswer });
       if (!data.isTournament) return;
-      setCorrectAnswer(data.correctAnswer ?? null);
-      setShowResult(true);
-      const iWon = data.result === 'win';
-      if (iWon) playCorrect(); else playWrong();
+      
+      if (data.result === 'both_wrong') {
+        // Both wrong but match continues — don't reveal correct answer, just show wrong selection
+        setShowResult(true);
+        setCorrectAnswer('none'); // sentinel: suppress green highlight entirely
+        playWrong();
+      } else {
+        // Normal result (win/lose/gameover) — reveal the correct answer
+        setCorrectAnswer(data.correctAnswer ?? null);
+        setShowResult(true);
+        const iWon = data.result === 'win';
+        if (iWon) playCorrect(); else playWrong();
+      }
       // No advancement here — server sends tournament_round_won or tournament_eliminated next
     };
     socket.on('round_result', handler);
@@ -384,7 +392,8 @@ function TournamentMatch({ questions, currentQuestionIndex, totalQuestions, oppo
     : [];
 
   // Use correctAnswer from server (round_result) if available, fall back to q.correct
-  const correctKey = correctAnswer ?? q.correct;
+  // correctAnswer === 'none' means explicitly hide the correct answer (e.g. both_wrong)
+  const correctKey = correctAnswer === 'none' ? null : (correctAnswer ?? q.correct);
   const displayTotal = totalQuestions || questions.length;
 
   return (
