@@ -948,6 +948,38 @@ export default function SpecialScreen() {
     return <TournamentEnded championUsername={tournament.championUsername} myUsername={username || state.username} />;
   }
 
+  // No winner (all players eliminated)
+  if (tournament.phase === 'no_winner') {
+    return (
+      <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 flex items-center justify-center">
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          {[...Array(80)].map((_, i) => (
+            <div
+              key={i}
+              className="absolute w-1 h-1 bg-white rounded-full animate-twinkle"
+              style={{
+                top: `${Math.random() * 100}%`,
+                left: `${Math.random() * 100}%`,
+                animationDelay: `${Math.random() * 3}s`,
+                opacity: 0.3 + Math.random() * 0.7,
+              }}
+            />
+          ))}
+        </div>
+        <div className="relative z-10 text-center px-6 max-w-md">
+          <div className="text-6xl mb-6">🤷‍♂️</div>
+          <h1 className="text-3xl font-bold text-white mb-4">No Champion This Round!</h1>
+          <p className="text-white/80 text-lg mb-6">
+            {tournament.noWinnerMessage || "All players were eliminated. Better luck next time!"}
+          </p>
+          <p className="text-white/60 text-sm">
+            The next tournament will be announced soon.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   // Blocked from joining (tournament in progress)
   if (tournament.phase === 'blocked') {
     return (

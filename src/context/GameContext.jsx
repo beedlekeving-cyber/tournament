@@ -440,6 +440,10 @@ function gameReducer(state, action) {
       // Non-champions see this, champions see TOURNAMENT_CHAMPION
       return { ...state, tournament: { ...state.tournament, phase: 'tournament_ended', championUsername: action.payload.username, isChampion: false } };
 
+    case 'TOURNAMENT_NO_WINNER':
+      // All players eliminated, no champion
+      return { ...state, tournament: { ...state.tournament, phase: 'no_winner', noWinnerMessage: action.payload.message } };
+
     case 'TOURNAMENT_IN_PROGRESS_BLOCKED':
       // Player tried to join an active tournament they're not part of
       return { ...state, tournament: { ...state.tournament, phase: 'blocked', blockedMessage: action.payload.message } };
@@ -709,6 +713,13 @@ export function GameProvider({ children }) {
     socket.on('tournament_champion',    onTournamentChampion);
     socket.on('you_are_champion',       onYouAreChampion);
     socket.on('next_question',          onNextQuestion);
+    
+    // Handle case where all players are eliminated (no champion)
+    const onTournamentNoWinner = ({ round, message }) => {
+      console.log('[TOURNAMENT] no_winner:', { round, message });
+      dispatch({ type: 'TOURNAMENT_NO_WINNER', payload: { round, message } });
+    };
+    socket.on('tournament_no_winner', onTournamentNoWinner);
 
     socket.on('tournament_waiting',          onTournamentWaiting);
     socket.on('waiting_count',              onWaitingCount);
@@ -793,6 +804,7 @@ export function GameProvider({ children }) {
       socket.off('tournament_champion',   onTournamentChampion);
       socket.off('you_are_champion',      onYouAreChampion);
       socket.off('next_question',         onNextQuestion);
+      socket.off('tournament_no_winner',  onTournamentNoWinner);
       socket.off('tournament_waiting',         onTournamentWaiting);
       socket.off('waiting_count',             onWaitingCount);
       socket.off('tournament_reset',          onTournamentReset);
