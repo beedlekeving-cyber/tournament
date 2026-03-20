@@ -6,7 +6,7 @@ import {
   addCoins, getCoins, getStreak, incrementStreak, resetStreak,
   validateAnswer,
 } from '../utils/anticheat';
-import socket from '../utils/socket';
+import socket, { setReconnectContext, onConnectionChange } from '../utils/socket';
 import { getOrCreateSessionToken } from '../utils/security';
 import { registerUser, fetchUsers, BASE_URL } from '../utils/api';
 
@@ -54,6 +54,10 @@ const initialState = {
   streak: 0,
   spectators: Math.floor(Math.random() * 300) + 50, // simulated live spectators
   totalMatchTime: 0,  // total seconds used across all 10 winning matches
+
+  // Connection status
+  isConnected: false,
+  lastSyncTime: null,
 
   // Match info
   matchId: null,
@@ -349,6 +353,25 @@ function gameReducer(state, action) {
     case 'SPECIAL_SESSION_UPDATED':
       return { ...state, specialSessionActive: action.payload.active };
 
+    case 'CONNECTION_STATUS':
+      return { ...state, isConnected: action.payload };
+
+    case 'STATE_SYNC': {
+      // Server sent full state sync — merge carefully
+      const sync = action.payload;
+      return {
+        ...state,
+        lastSyncTime: Date.now(),
+        stage: sync.stage || state.stage,
+        matchId: sync.matchId ?? state.matchId,
+        opponent: sync.opponent ?? state.opponent,
+        waitingCount: sync.waitingCount ?? state.waitingCount,
+        tournamentStarted: sync.tournamentStarted ?? state.tournamentStarted,
+        scheduledDate: sync.scheduledDate ?? state.scheduledDate,
+        tournament: sync.tournament ? { ...state.tournament, ...sync.tournament } : state.tournament,
+      };
+    }
+
     case ACTIONS.TOURNAMENT_COUNTDOWN_WARNING:
       return { ...state, tournament: { ...state.tournament, phase: 'countdown_warning', countdownWarning: action.payload.message } };
 
@@ -410,6 +433,16 @@ export function GameProvider({ children }) {
 
   // Track lobby timeout handle so we can cancel it on cleanup
   const lobbyTimeoutRef = useRef(null);
+  // Track anti-stuck timeout
+  const stuckTimeoutRef = useRef(null);
+
+  // ── Connection status tracking ────────────────────────────────────────────
+  useEffect(() => {
+    const unsubscribe = onConnectionChange((connected) => {
+      dispatch({ type: 'CONNECTION_STATUS', payload: connected });
+    });
+    return unsubscribe;
+  }, []);
 
   // ── Socket.io event listeners (mount once) ────────────────────────────────
   useEffect(() => {
@@ -425,9 +458,14 @@ export function GameProvider({ children }) {
       if (questions) {
         try { localStorage.setItem('qd_server_questions_' + matchId, JSON.stringify(questions)); } catch (_) {}
       }
+      // Clear all lobby timeouts
       if (lobbyTimeoutRef.current) {
         clearTimeout(lobbyTimeoutRef.current);
         lobbyTimeoutRef.current = null;
+      }
+      if (stuckTimeoutRef.current) {
+        clearInterval(stuckTimeoutRef.current);
+        stuckTimeoutRef.current = null;
       }
       dispatch({
         type: ACTIONS.MATCH_FOUND,
@@ -494,6 +532,10 @@ export function GameProvider({ children }) {
       if (lobbyTimeoutRef.current) {
         clearTimeout(lobbyTimeoutRef.current);
         lobbyTimeoutRef.current = null;
+      }
+      if (stuckTimeoutRef.current) {
+        clearInterval(stuckTimeoutRef.current);
+        stuckTimeoutRef.current = null;
       }
       dispatch({ type: 'TOURNAMENT_WAITING', payload: { ...data, activeCount: data.activeCount ?? 0 } });
     };
@@ -588,6 +630,12 @@ export function GameProvider({ children }) {
     socket.on('force_reload',               onForceReload);
     socket.on('special_session_updated',    onSpecialSessionUpdated);
 
+    // State sync from server (after reconnection or visibility change)
+    const onStateSync = (data) => {
+      dispatch({ type: 'STATE_SYNC', payload: data });
+    };
+    socket.on('state_sync', onStateSync);
+
     // Fetch initial special session state
     fetch(`${BASE_URL}/admin/special-session`)
       .then(res => res.json())
@@ -620,6 +668,7 @@ export function GameProvider({ children }) {
       socket.off('tournament_reset',          onTournamentReset);
       socket.off('force_reload',              onForceReload);
       socket.off('special_session_updated',   onSpecialSessionUpdated);
+      socket.off('state_sync',                onStateSync);
     };
   }, []);
 
@@ -654,12 +703,24 @@ export function GameProvider({ children }) {
       specialActive = ss?.active || false;
     } catch (_) {}
     const isSpecialSession = isOnSpecialRoute && specialActive;
+
+    // Set reconnection context so socket can auto-rejoin on reconnect
+    setReconnectContext({ deviceId, sessionToken, username, isSpecialSession });
+
     socket.emit('register_device', { deviceId, sessionToken });
     socket.emit('join_lobby', { deviceId, username, sessionToken, isSpecialSession });
+
+    // Anti-stuck: if in lobby for more than 30s without any update, request resync
+    stuckTimeoutRef.current = setInterval(() => {
+      if (socket.connected) {
+        socket.emit('request_state_sync', { deviceId });
+      }
+    }, 30000);
 
     // Fallback: if no opponent found within 28 s → bot match
     lobbyTimeoutRef.current = setTimeout(() => {
       clearInterval(specInterval);
+      if (stuckTimeoutRef.current) clearInterval(stuckTimeoutRef.current);
       // Only trigger fallback if still in lobby stage
       dispatch((getState) => {
         // We can't read state directly in useCallback without stale closure,

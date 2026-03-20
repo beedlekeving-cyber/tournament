@@ -10,6 +10,7 @@ import ChampionScreen from './screens/ChampionScreen';
 import LeaderboardScreen from './screens/LeaderboardScreen';
 import SpecialViewScreen from './screens/SpecialViewScreen';
 import SecurityGuard from './components/SecurityGuard';
+import ConnectionStatus from './components/ConnectionStatus';
 
 // Detect /special or /bible path for Bible quiz
 function isSpecialRoute() {
@@ -36,7 +37,12 @@ function AppContent() {
 
   // ── Bible Quiz (Special Session) - Always available at /special or /bible ──
   if (isSpecialRoute()) {
-    return <SecurityGuard matchId={null} isInMatch={false}><SpecialScreen /></SecurityGuard>;
+    return (
+      <SecurityGuard matchId={null} isInMatch={false}>
+        <ConnectionStatus />
+        <SpecialScreen />
+      </SecurityGuard>
+    );
   }
 
   // ── Normal game flow ────────────────────────────────────────────────────
@@ -57,6 +63,7 @@ function AppContent() {
 
   return (
     <SecurityGuard matchId={matchId} isInMatch={isInMatch}>
+      <ConnectionStatus />
       {screen}
     </SecurityGuard>
   );
