@@ -938,6 +938,38 @@ export default function SpecialScreen() {
     return <TournamentEnded championUsername={tournament.championUsername} myUsername={username || state.username} />;
   }
 
+  // Blocked from joining (tournament in progress)
+  if (tournament.phase === 'blocked') {
+    return (
+      <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex items-center justify-center">
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          {[...Array(80)].map((_, i) => (
+            <div
+              key={i}
+              className="absolute w-1 h-1 bg-white rounded-full animate-twinkle"
+              style={{
+                top: `${Math.random() * 100}%`,
+                left: `${Math.random() * 100}%`,
+                animationDelay: `${Math.random() * 3}s`,
+                opacity: 0.3 + Math.random() * 0.7,
+              }}
+            />
+          ))}
+        </div>
+        <div className="relative z-10 text-center px-6 max-w-md">
+          <div className="text-6xl mb-6">⏳</div>
+          <h1 className="text-3xl font-bold text-white mb-4">Tournament In Progress</h1>
+          <p className="text-white/80 text-lg mb-6">
+            {tournament.blockedMessage || "A tournament is currently running. Please wait for it to complete before joining."}
+          </p>
+          <p className="text-white/60 text-sm">
+            The next tournament will be announced soon!
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   // Eliminated
   if (tournament.phase === 'eliminated') {
     return <TournamentEliminated username={username || state.username} />;

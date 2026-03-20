@@ -47,6 +47,10 @@ export function getReconnectContext() {
   return reconnectContext;
 }
 
+// Track last join_lobby emission to prevent spam
+let lastJoinLobbyTime = 0;
+const JOIN_LOBBY_COOLDOWN = 5000; // 5 seconds between join_lobby emissions
+
 // ─── Core socket events ──────────────────────────────────────────────────────
 socket.on('connect', () => {
   if (import.meta.env.DEV) console.log('[socket] connected', socket.id);
@@ -56,7 +60,11 @@ socket.on('connect', () => {
   if (reconnectContext) {
     const { deviceId, sessionToken, username, isSpecialSession } = reconnectContext;
     socket.emit('register_device', { deviceId, sessionToken });
-    if (username) {
+    
+    // Only emit join_lobby if cooldown has passed (prevent spam on reconnect loops)
+    const now = Date.now();
+    if (username && (now - lastJoinLobbyTime > JOIN_LOBBY_COOLDOWN)) {
+      lastJoinLobbyTime = now;
       socket.emit('join_lobby', { deviceId, username, sessionToken, isSpecialSession });
     }
     // Request current state sync

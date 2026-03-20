@@ -440,6 +440,10 @@ function gameReducer(state, action) {
       // Non-champions see this, champions see TOURNAMENT_CHAMPION
       return { ...state, tournament: { ...state.tournament, phase: 'tournament_ended', championUsername: action.payload.username, isChampion: false } };
 
+    case 'TOURNAMENT_IN_PROGRESS_BLOCKED':
+      // Player tried to join an active tournament they're not part of
+      return { ...state, tournament: { ...state.tournament, phase: 'blocked', blockedMessage: action.payload.message } };
+
     case ACTIONS.TOURNAMENT_NEXT_QUESTION: {
       const { questionIndex, question, totalQuestions } = action.payload;
       // Replace or append the server-provided question at the given index
@@ -743,7 +747,8 @@ export function GameProvider({ children }) {
     // Tournament state guards - handle late joiners / eliminated players
     const onTournamentInProgress = ({ message }) => {
       console.log('[socket] tournament_in_progress:', message);
-      // Could show a message that tournament is already running
+      // Set flag to stop reconnect spam and show user a message
+      dispatch({ type: 'TOURNAMENT_IN_PROGRESS_BLOCKED', payload: { message } });
     };
     socket.on('tournament_in_progress', onTournamentInProgress);
     
