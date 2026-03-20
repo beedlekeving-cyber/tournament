@@ -331,8 +331,9 @@ function TournamentMatch({ questions, currentQuestionIndex, totalQuestions, oppo
     const handler = (data) => {
       console.log('[TournamentMatch] next_question received:', { isTournament: data.isTournament, questionIndex: data.questionIndex, currentQuestionIndex });
       if (!data.isTournament) return;
-      // Show correct answer highlight + play sound
-      setCorrectAnswer(data.question?.correct ?? null);
+      // Highlight the CURRENT question's correct answer (not the next question's)
+      // Both players answered correctly, so q.correct is what should be highlighted green
+      setCorrectAnswer(q?.correct ?? null);
       setShowResult(true);
       playCorrect();
       setBothCorrectMsg(data.message || 'Both correct! Next question...');
@@ -342,7 +343,7 @@ function TournamentMatch({ questions, currentQuestionIndex, totalQuestions, oppo
     };
     socket.on('next_question', handler);
     return () => socket.off('next_question', handler);
-  }, [currentQuestionIndex]);
+  }, [currentQuestionIndex, q]);
 
   // round_result: match is OVER (one wins, one loses, or both wrong).
   // Just reveal the correct answer and play the appropriate sound.
