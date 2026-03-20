@@ -1231,11 +1231,21 @@ export default function SpecialScreen() {
           {/* Players waiting */}
           <div className="rounded-2xl p-4 mb-6"
             style={{ background: 'rgba(30,10,60,0.6)', border: '1px solid rgba(167,139,250,0.3)', backdropFilter: 'blur(12px)' }}>
-            <div className="flex items-center justify-center gap-3">
+            <div className="flex items-center justify-center gap-3 flex-wrap">
               <Users className="w-5 h-5 text-purple-400" />
-              <span className="text-purple-200 font-bold">{lobbyCount} players</span>
-              <span className="text-gray-500">registered</span>
+              <span className="text-purple-200 font-bold">{lobbyCount} registered</span>
+              {activeCount > 0 && (
+                <>
+                  <span className="text-gray-500">•</span>
+                  <span className="text-green-400 font-bold">⚡ {activeCount} online</span>
+                </>
+              )}
             </div>
+            {activeCount > 0 && activeCount < lobbyCount && (
+              <p className="text-amber-400/80 text-xs text-center mt-2">
+                ⚠️ {lobbyCount - activeCount} player(s) may have connection issues
+              </p>
+            )}
           </div>
 
           {/* Demo button - prominent */}

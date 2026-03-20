@@ -617,6 +617,12 @@ export function GameProvider({ children }) {
       const secs = secondsRemaining ?? secondsLeft;
       dispatch({ type: ACTIONS.TOURNAMENT_COUNTDOWN_WARNING, payload: { message: message || `Tournament starts in ${secs}s!` } });
     };
+    
+    // Grace period: we have enough players, waiting a few more seconds for others
+    const onTournamentGracePeriod = ({ message, activeCount, secondsRemaining }) => {
+      console.log('[TOURNAMENT] grace_period:', { activeCount, secondsRemaining });
+      dispatch({ type: ACTIONS.TOURNAMENT_COUNTDOWN_WARNING, payload: { message: message || `${activeCount} players ready! Starting soon...` } });
+    };
 
     const onTournamentStartedFull = ({ bibleQuestions, playerCount, round, questionsPerMatch }) => {
       dispatch({ type: ACTIONS.TOURNAMENT_STARTED, payload: { bibleQuestions: bibleQuestions || [], playerCount: playerCount || 0, round: round || 1, questionsPerMatch: questionsPerMatch || 5 } });
@@ -704,6 +710,7 @@ export function GameProvider({ children }) {
     };
 
     socket.on('tournament_countdown',   onTournamentCountdown);
+    socket.on('tournament_grace_period', onTournamentGracePeriod);
     socket.on('tournament_started',     onTournamentStartedFull);
     socket.on('match_found',            (data) => { if (data.isTournament) onTournamentMatchFound(data); else onMatchFound(data); });
     socket.on('round_result',           (data) => { if (data.isTournament) onTournamentRoundResult(data); else onRoundResult(data); });
@@ -797,6 +804,7 @@ export function GameProvider({ children }) {
       socket.off('registration_error',         onRegistrationError);
       socket.off('match_over_forfeit',         onMatchOverForfeit);
       socket.off('tournament_countdown',  onTournamentCountdown);
+      socket.off('tournament_grace_period', onTournamentGracePeriod);
       socket.off('tournament_started',    onTournamentStartedFull);
       socket.off('tournament_round_won',  onTournamentRoundWon);
       socket.off('tournament_eliminated', onTournamentEliminated);
