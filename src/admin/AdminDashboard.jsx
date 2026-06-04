@@ -1,46 +1,40 @@
 import { useAdmin } from './AdminContext';
 import DashboardTab from './tabs/DashboardTab';
-import QuestionsTab from './tabs/QuestionsTab';
 import WinnersTab from './tabs/WinnersTab';
 import PlayersTab from './tabs/PlayersTab';
 import SettingsTab from './tabs/SettingsTab';
 import TournamentTab from './tabs/TournamentTab';
-import SpecialSessionTab from './tabs/SpecialSessionTab';
-import SpecialViewScreen from '../screens/SpecialViewScreen';
+import ViewScreen from '../screens/ViewScreen';
 
 // Wrapper so the view screen fills the admin tab area
 function ViewScreenTab() {
   return (
     <div className="-m-5 overflow-hidden rounded-2xl" style={{ minHeight: '620px' }}>
-      <SpecialViewScreen embedded={true} />
+      <ViewScreen embedded={true} />
     </div>
   );
 }
 
 import {
-  LayoutDashboard, HelpCircle, Trophy, Users, Settings,
-  LogOut, Zap, X, CheckCircle, AlertCircle, Swords, FlaskConical, Monitor
+  LayoutDashboard, Trophy, Users, Settings,
+  LogOut, Zap, X, CheckCircle, AlertCircle, Swords, Monitor,
 } from 'lucide-react';
 
 const TABS = [
   { id: 'dashboard',  label: 'Dashboard',  icon: LayoutDashboard },
   { id: 'tournament', label: 'Tournament', icon: Swords           },
-  { id: 'questions',  label: 'Questions',  icon: HelpCircle       },
   { id: 'winners',    label: 'Winners',    icon: Trophy           },
   { id: 'players',    label: 'Players',    icon: Users            },
   { id: 'settings',   label: 'Settings',   icon: Settings         },
-  { id: 'special',    label: 'Special',    icon: FlaskConical     },
   { id: 'viewscreen', label: 'View Screen', icon: Monitor         },
 ];
 
 const TAB_COMPONENTS = {
   dashboard:  DashboardTab,
   tournament: TournamentTab,
-  questions:  QuestionsTab,
   winners:    WinnersTab,
   players:    PlayersTab,
   settings:   SettingsTab,
-  special:    SpecialSessionTab,
   viewscreen: ViewScreenTab,
 };
 
@@ -54,7 +48,7 @@ export default function AdminDashboard() {
   if (tab === 'viewscreen') {
     return (
       <div className="fixed inset-0 z-50">
-        <SpecialViewScreen embedded={false} />
+        <ViewScreen embedded={false} />
 
         {/* Floating close button */}
         <button

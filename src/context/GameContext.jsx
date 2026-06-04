@@ -8,32 +8,10 @@ import {
 } from '../utils/anticheat';
 import socket, { setReconnectContext, onConnectionChange } from '../utils/socket';
 import { getOrCreateSessionToken } from '../utils/security';
-import { registerUser, fetchUsers, BASE_URL } from '../utils/api';
+import { registerUser, fetchUsers, fetchPublicQuestions } from '../utils/api';
 
-// ─── Question Source (normal or special session) ────────────────────────────
+// Casual 1v1 client-side question picker. Tournament uses server-provided questions.
 function pickQuestions(count, excludeIds, seed) {
-  try {
-    const ss = JSON.parse(localStorage.getItem('qd_special_session') || 'null');
-    if (ss?.active && ss.questions.length > 0) {
-      // Special session: always use the full pool (recycle if needed)
-      // so the game never goes blank regardless of how many questions are in the set
-      const pool = ss.questions.length >= count
-        ? ss.questions  // enough questions — use all
-        : [...ss.questions, ...ss.questions, ...ss.questions].slice(0, count * 3); // repeat pool to fill
-      const h = String(seed || 'default');
-      let s = 0x811c9dc5;
-      for (let i = 0; i < h.length; i++) { s ^= h.charCodeAt(i); s = (s * 0x01000193) >>> 0; }
-      let sv = s;
-      const rng = () => { sv += 0x6d2b79f5; let t = Math.imul(sv ^ (sv >>> 15), 1 | sv); t ^= t + Math.imul(t ^ (t >>> 7), 61 | t); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-      const shuffled = [...pool].sort(() => rng() - 0.5);
-      // deduplicate by id while preserving order
-      const seen = new Set();
-      const deduped = shuffled.filter(q => { if (seen.has(q.id)) return false; seen.add(q.id); return true; });
-      // if still not enough after dedup, allow repeats
-      const result = deduped.length >= count ? deduped.slice(0, count) : shuffled.slice(0, count);
-      return result;
-    }
-  } catch (_) {}
   return seed ? getSeededQuestions(count, excludeIds, seed) : getRandomQuestions(count, excludeIds);
 }
 
@@ -88,28 +66,29 @@ const initialState = {
 
   // Tournament waiting
   waitingCount: 0,
+  maxPlayers: 400,
   tournamentStarted: false,
   scheduledDate: null,
-
-  // Special session (Bible quiz)
-  specialSessionActive: false,
+  rewardAmount: '',
 
   // ── Tournament ──────────────────────────────────────────────────────────────
   tournament: {
-    phase: 'idle',           // idle | countdown_warning | waiting_match | in_match | round_won | bye | eliminated | champion
+    phase: 'idle',           // idle | countdown_warning | waiting_match | in_match | round_won | bye | eliminated | champion | tournament_ended | no_winner | blocked
     countdownWarning: null,  // e.g. '5 minutes to go!'
     round: 1,
-    matchId: null,           // current match ID (needed for submit_answer)
-    bibleQuestions: [],      // full bank sent by server on tournament_started
+    roundLabel: 'Round 1',   // human label sent by server (Round N / Quarter Final / Semi Final / Final)
+    matchId: null,           // current match ID
     matchQuestions: [],      // questions for current match (from match_found)
     currentQuestionIndex: 0,
     opponent: null,          // { username, id }
     myAnswer: null,
-    roundResult: null,       // { correct, correctAnswer, opponentAnswer, won }
+    roundResult: null,
     playerCount: 0,
-    questionsPerMatch: 5,    // how many questions per match (from server)
-    totalQuestions: 5,       // totalQuestions field from match_found
-    bothCorrectFeedback: false, // true briefly when server says both correct
+    questionsPerMatch: 5,
+    totalQuestions: 5,
+    bothCorrectFeedback: false,
+    rewardAmount: '',        // mirrored at tournament_started / you_are_champion
+    tournamentId: null,
   },
 
   // UI
@@ -349,10 +328,10 @@ function gameReducer(state, action) {
       return { ...state, tournamentStarted: true };
 
     case 'WAITING_COUNT':
-      return { ...state, waitingCount: action.payload };
+      return { ...state, waitingCount: action.payload.count ?? action.payload, maxPlayers: action.payload.max ?? state.maxPlayers };
 
-    case 'SPECIAL_SESSION_UPDATED':
-      return { ...state, specialSessionActive: action.payload.active };
+    case 'REWARD_UPDATED':
+      return { ...state, rewardAmount: action.payload.rewardAmount ?? state.rewardAmount };
 
     case 'CONNECTION_STATUS':
       return { ...state, isConnected: action.payload };
@@ -377,26 +356,43 @@ function gameReducer(state, action) {
       return { ...state, tournament: { ...state.tournament, phase: 'countdown_warning', countdownWarning: action.payload.message } };
 
     case ACTIONS.TOURNAMENT_STARTED:
-      return { ...state, tournamentStarted: true, tournament: { ...state.tournament, phase: 'waiting_match', bibleQuestions: action.payload.bibleQuestions || [], playerCount: action.payload.playerCount || 0, round: action.payload.round || 1, questionsPerMatch: action.payload.questionsPerMatch || 5, countdownWarning: null } };
+      return {
+        ...state,
+        tournamentStarted: true,
+        rewardAmount: action.payload.rewardAmount ?? state.rewardAmount,
+        maxPlayers: action.payload.maxPlayers ?? state.maxPlayers,
+        tournament: {
+          ...state.tournament,
+          phase: 'waiting_match',
+          playerCount: action.payload.playerCount || 0,
+          round: action.payload.round || 1,
+          roundLabel: action.payload.roundLabel || `Round ${action.payload.round || 1}`,
+          questionsPerMatch: action.payload.questionsPerMatch || 5,
+          rewardAmount: action.payload.rewardAmount || state.rewardAmount || '',
+          tournamentId: action.payload.tournamentId || state.tournament.tournamentId,
+          countdownWarning: null,
+        },
+      };
 
     case ACTIONS.TOURNAMENT_MATCH_FOUND:
-      return { 
-        ...state, 
-        tournament: { 
-          ...state.tournament, 
-          phase: 'pre_match', // Start with pre-match countdown
-          matchId: action.payload.matchId, 
-          matchQuestions: action.payload.questions || [], 
-          currentQuestionIndex: 0, 
-          opponent: action.payload.opponent, 
-          myAnswer: null, 
-          roundResult: null, 
-          round: action.payload.round || state.tournament.round, 
-          totalQuestions: action.payload.totalQuestions || action.payload.questions?.length || state.tournament.questionsPerMatch, 
+      return {
+        ...state,
+        tournament: {
+          ...state.tournament,
+          phase: 'pre_match',
+          matchId: action.payload.matchId,
+          matchQuestions: action.payload.questions || [],
+          currentQuestionIndex: 0,
+          opponent: action.payload.opponent,
+          myAnswer: null,
+          roundResult: null,
+          round: action.payload.round || state.tournament.round,
+          roundLabel: action.payload.roundLabel || state.tournament.roundLabel,
+          totalQuestions: action.payload.totalQuestions || action.payload.questions?.length || state.tournament.questionsPerMatch,
           bothCorrectFeedback: false,
           preMatchCountdown: action.payload.preMatchCountdown || 5,
           questionTime: action.payload.questionTime || 15,
-        } 
+        },
       };
 
     case 'TOURNAMENT_PRE_MATCH_TICK':
@@ -434,11 +430,35 @@ function gameReducer(state, action) {
       return { ...state, tournament: { ...state.tournament, phase: 'eliminated' } };
 
     case ACTIONS.TOURNAMENT_NEXT_ROUND:
-      return { ...state, tournament: { ...state.tournament, phase: 'waiting_match', currentQuestionIndex: 0, matchQuestions: [], opponent: null, myAnswer: null, roundResult: null, round: action.payload.round || state.tournament.round, questionsPerMatch: action.payload.questionsPerMatch || state.tournament.questionsPerMatch, bothCorrectFeedback: false } };
+      return {
+        ...state,
+        tournament: {
+          ...state.tournament,
+          phase: 'waiting_match',
+          currentQuestionIndex: 0,
+          matchQuestions: [],
+          opponent: null,
+          myAnswer: null,
+          roundResult: null,
+          round: action.payload.round || state.tournament.round,
+          roundLabel: action.payload.roundLabel || state.tournament.roundLabel,
+          questionsPerMatch: action.payload.questionsPerMatch || state.tournament.questionsPerMatch,
+          bothCorrectFeedback: false,
+        },
+      };
 
     case ACTIONS.TOURNAMENT_CHAMPION:
-      // This is for the actual champion (you_are_champion event)
-      return { ...state, tournament: { ...state.tournament, phase: 'champion', isChampion: true } };
+      // Only fires for the actual champion (you_are_champion)
+      return {
+        ...state,
+        tournament: {
+          ...state.tournament,
+          phase: 'champion',
+          isChampion: true,
+          rewardAmount: action.payload?.rewardAmount ?? state.tournament.rewardAmount ?? state.rewardAmount,
+          tournamentId: action.payload?.tournamentId ?? state.tournament.tournamentId,
+        },
+      };
 
     case 'TOURNAMENT_ENDED':
       // This is broadcast to everyone when a champion is declared
@@ -489,6 +509,40 @@ export function GameProvider({ children }) {
   const lobbyTimeoutRef = useRef(null);
   // Track anti-stuck timeout
   const stuckTimeoutRef = useRef(null);
+
+  // Question bank fetched once on mount, used to hydrate `questionIds` from the
+  // server into full question objects locally. Server keeps the `correct` field
+  // for validation; the client only ever holds id/question/options/category.
+  const bankByIdRef = useRef({});
+  const hydrateQuestion = useCallback((id) => bankByIdRef.current[id] || null, []);
+  const hydrateQuestions = useCallback(
+    (ids) => (Array.isArray(ids) ? ids.map(hydrateQuestion).filter(Boolean) : []),
+    [hydrateQuestion]
+  );
+
+  // Fetch the public bank once on mount. Retries silently if the network is bad.
+  useEffect(() => {
+    let cancelled = false;
+    const load = async (attempt = 0) => {
+      try {
+        const list = await fetchPublicQuestions();
+        if (cancelled) return;
+        const map = {};
+        for (const q of list) map[q.id] = q;
+        bankByIdRef.current = map;
+        console.log(`[questions] Loaded ${list.length} questions into local cache`);
+      } catch (e) {
+        if (cancelled) return;
+        if (attempt < 3) {
+          setTimeout(() => load(attempt + 1), 1500 * (attempt + 1));
+        } else {
+          console.warn('[questions] Could not load question bank:', e.message);
+        }
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, []);
 
   // ── Connection status tracking ────────────────────────────────────────────
   useEffect(() => {
@@ -573,7 +627,7 @@ export function GameProvider({ children }) {
       alert('⚠️ ' + message);
     };
     const onRegistrationError = ({ error, code }) => {
-      // SpecialScreen handles this with inline UI; log here as a fallback
+      // TournamentScreen handles this with inline UI; log here as a fallback
       console.warn('[Registration] Error:', code, error);
     };
     const onMatchOverForfeit = ({ result }) => {
@@ -593,8 +647,11 @@ export function GameProvider({ children }) {
       }
       dispatch({ type: 'TOURNAMENT_WAITING', payload: { ...data, activeCount: data.activeCount ?? 0 } });
     };
-    const onWaitingCount = ({ count }) => {
-      dispatch({ type: 'WAITING_COUNT', payload: count });
+    const onWaitingCount = (data) => {
+      dispatch({ type: 'WAITING_COUNT', payload: data });
+    };
+    const onTournamentConfig = (data) => {
+      dispatch({ type: 'REWARD_UPDATED', payload: { rewardAmount: data.rewardAmount } });
     };
     const onTournamentReset = () => {
       dispatch({ type: ACTIONS.RESET_GAME });
@@ -609,13 +666,6 @@ export function GameProvider({ children }) {
     socket.on('security_duplicate_session',  onDuplicateSession);
     socket.on('registration_error',          onRegistrationError);
     socket.on('match_over_forfeit',          onMatchOverForfeit);
-    const onSpecialSessionUpdated = (data) => {
-      dispatch({ type: 'SPECIAL_SESSION_UPDATED', payload: data });
-      // Store in localStorage so SpecialScreen can check it
-      try {
-        localStorage.setItem('qd_special_session', JSON.stringify(data));
-      } catch (_) {}
-    };
 
     // ── Tournament socket events ──────────────────────────────────────────────
     const onTournamentCountdown = ({ message, secondsRemaining, secondsLeft }) => {
@@ -629,28 +679,43 @@ export function GameProvider({ children }) {
       dispatch({ type: ACTIONS.TOURNAMENT_COUNTDOWN_WARNING, payload: { message: message || `${activeCount} players ready! Starting soon...` } });
     };
 
-    const onTournamentStartedFull = ({ bibleQuestions, playerCount, round, questionsPerMatch }) => {
-      dispatch({ type: ACTIONS.TOURNAMENT_STARTED, payload: { bibleQuestions: bibleQuestions || [], playerCount: playerCount || 0, round: round || 1, questionsPerMatch: questionsPerMatch || 5 } });
-      // Also mark global tournament started flag
+    const onTournamentStartedFull = ({ playerCount, round, roundLabel, questionsPerMatch, rewardAmount, maxPlayers, tournamentId }) => {
+      dispatch({
+        type: ACTIONS.TOURNAMENT_STARTED,
+        payload: {
+          playerCount: playerCount || 0,
+          round: round || 1,
+          roundLabel: roundLabel || `Round ${round || 1}`,
+          questionsPerMatch: questionsPerMatch || 5,
+          rewardAmount,
+          maxPlayers,
+          tournamentId,
+        },
+      });
       dispatch({ type: 'TOURNAMENT_STARTED' });
     };
 
-    const onTournamentMatchFound = ({ matchId, questions, opponent, you, round, totalQuestions, isTournament, preMatchCountdown, questionTime }) => {
-      console.log('[TOURNAMENT] match_found:', { matchId, round, totalQuestions, opponent: opponent?.username, preMatchCountdown, questionTime, questionsCount: questions?.length });
+    const onTournamentMatchFound = ({ matchId, questionIds, opponent, round, roundLabel, totalQuestions, isTournament, preMatchCountdown, questionTime }) => {
       if (!isTournament) return; // handled by the normal match_found listener above
+      const hydrated = hydrateQuestions(questionIds);
+      console.log('[TOURNAMENT] match_found:', { matchId, round, roundLabel, totalQuestions, opponent: opponent?.username, preMatchCountdown, questionTime, questionIdCount: questionIds?.length, hydrated: hydrated.length });
+      if (questionIds?.length && hydrated.length === 0) {
+        console.warn('[TOURNAMENT] match_found: question bank not yet loaded — match will render empty until bank arrives');
+      }
       const opp = opponent ?? {};
-      const countdown = preMatchCountdown || 5; // Default to 5 seconds if not provided
-      dispatch({ 
-        type: ACTIONS.TOURNAMENT_MATCH_FOUND, 
-        payload: { 
-          matchId, 
-          questions: questions || [], 
-          opponent: { username: opp.username, id: opp.id || opp.deviceId }, 
-          round: round || 1, 
-          totalQuestions: totalQuestions || questions?.length || 5,
+      const countdown = preMatchCountdown || 5;
+      dispatch({
+        type: ACTIONS.TOURNAMENT_MATCH_FOUND,
+        payload: {
+          matchId,
+          questions: hydrated,
+          opponent: { username: opp.username, id: opp.id || opp.deviceId },
+          round: round || 1,
+          roundLabel,
+          totalQuestions: totalQuestions || questionIds?.length || 5,
           preMatchCountdown: countdown,
           questionTime: questionTime || 15,
-        } 
+        },
       });
       
       // Start pre-match countdown
@@ -670,14 +735,14 @@ export function GameProvider({ children }) {
       dispatch({ type: ACTIONS.TOURNAMENT_ROUND_RESULT, payload: { result, questionIndex, correctAnswer, myAnswer, opponentAnswer, matchOver } });
     };
 
-    const onTournamentBye = ({ message, username, round }) => {
-      console.log('[TOURNAMENT] bye:', { message, username, round });
-      dispatch({ type: ACTIONS.TOURNAMENT_BYE, payload: { message, round } });
+    const onTournamentBye = ({ message, username, round, roundLabel }) => {
+      console.log('[TOURNAMENT] bye:', { message, username, round, roundLabel });
+      dispatch({ type: ACTIONS.TOURNAMENT_BYE, payload: { message, round, roundLabel } });
     };
 
-    const onTournamentRoundWon = ({ nextRound, round }) => {
-      console.log('[TOURNAMENT] round_won:', { nextRound, round });
-      dispatch({ type: ACTIONS.TOURNAMENT_ROUND_WON, payload: { nextRound: nextRound || round } });
+    const onTournamentRoundWon = ({ nextRound, round, roundLabel }) => {
+      console.log('[TOURNAMENT] round_won:', { nextRound, round, roundLabel });
+      dispatch({ type: ACTIONS.TOURNAMENT_ROUND_WON, payload: { nextRound: nextRound || round, roundLabel } });
     };
 
     const onTournamentEliminated = () => {
@@ -685,42 +750,37 @@ export function GameProvider({ children }) {
       dispatch({ type: ACTIONS.TOURNAMENT_ELIMINATED });
     };
 
-    const onTournamentNextRound = ({ round, questionsPerMatch }) => {
-      console.log('[TOURNAMENT] next_round:', { round, questionsPerMatch });
-      dispatch({ type: ACTIONS.TOURNAMENT_NEXT_ROUND, payload: { round, questionsPerMatch } });
+    const onTournamentNextRound = ({ round, roundLabel, questionsPerMatch }) => {
+      console.log('[TOURNAMENT] next_round:', { round, roundLabel, questionsPerMatch });
+      dispatch({ type: ACTIONS.TOURNAMENT_NEXT_ROUND, payload: { round, roundLabel, questionsPerMatch } });
     };
 
     // next_question: server says both players answered the same — move to next question.
+    // Server sends questionId only; we hydrate from the cached bank.
     // Delay the dispatch by 1.5 s so TournamentMatch can show the answer reveal first.
-    const onNextQuestion = ({ questionIndex, question, bothCorrectCount, bothWrongCount, message, totalQuestions }) => {
-      console.log('[TOURNAMENT] next_question:', { questionIndex, bothCorrectCount, bothWrongCount, totalQuestions, message });
-      // For both_wrong, the server already delayed 2s before sending next_question,
-      // so we use a shorter dispatch delay
+    const onNextQuestion = ({ questionIndex, questionId, bothCorrectCount, bothWrongCount, message, totalQuestions }) => {
+      console.log('[TOURNAMENT] next_question:', { questionIndex, questionId, bothCorrectCount, bothWrongCount, totalQuestions, message });
+      const question = hydrateQuestion(questionId);
       const delayMs = bothWrongCount ? 500 : 1500;
       setTimeout(() => {
         dispatch({ type: ACTIONS.TOURNAMENT_NEXT_QUESTION, payload: { questionIndex, question, bothCorrectCount, message, totalQuestions } });
       }, delayMs);
     };
 
-    // tournament_champion: broadcast to everyone when a champion is declared
-    // But only the actual champion should see the champion screen
-    const onTournamentChampion = ({ username, deviceId }) => {
-      // Check if WE are the champion
+    // tournament_champion: broadcast to EVERYONE. Only the champion gets you_are_champion.
+    const onTournamentChampion = ({ username, deviceId, rewardAmount }) => {
       const myDeviceId = localStorage.getItem('qd_deviceId');
-      console.log('[TOURNAMENT] tournament_champion:', { username, deviceId, myDeviceId, isMe: deviceId === myDeviceId });
+      console.log('[TOURNAMENT] tournament_champion:', { username, deviceId, rewardAmount, isMe: deviceId === myDeviceId });
       if (deviceId === myDeviceId) {
-        // We are the champion! (This is redundant if you_are_champion also fires, but handles edge cases)
-        dispatch({ type: ACTIONS.TOURNAMENT_CHAMPION });
+        dispatch({ type: ACTIONS.TOURNAMENT_CHAMPION, payload: { rewardAmount } });
       } else {
-        // Someone else won - show tournament ended screen
-        dispatch({ type: 'TOURNAMENT_ENDED', payload: { username, deviceId } });
+        dispatch({ type: 'TOURNAMENT_ENDED', payload: { username, deviceId, rewardAmount } });
       }
     };
 
-    const onYouAreChampion = () => {
-      // This is the definitive "you won" event
-      console.log('[TOURNAMENT] you_are_champion!');
-      dispatch({ type: ACTIONS.TOURNAMENT_CHAMPION });
+    const onYouAreChampion = ({ rewardAmount, tournamentId } = {}) => {
+      console.log('[TOURNAMENT] you_are_champion!', { rewardAmount, tournamentId });
+      dispatch({ type: ACTIONS.TOURNAMENT_CHAMPION, payload: { rewardAmount, tournamentId } });
     };
 
     socket.on('tournament_countdown',   onTournamentCountdown);
@@ -747,7 +807,7 @@ export function GameProvider({ children }) {
     socket.on('waiting_count',              onWaitingCount);
     socket.on('tournament_reset',           onTournamentReset);
     socket.on('force_reload',               onForceReload);
-    socket.on('special_session_updated',    onSpecialSessionUpdated);
+    socket.on('tournament_config_updated',  onTournamentConfig);
 
     // State sync from server (after reconnection or visibility change)
     const onStateSync = (data) => {
@@ -758,13 +818,12 @@ export function GameProvider({ children }) {
     // Match reconnected — player was restored to their active match after disconnect
     const onMatchReconnected = (data) => {
       console.log('[socket] match_reconnected', data);
-      // Restore tournament match state
       if (data.isTournament) {
-        dispatch({ 
-          type: ACTIONS.TOURNAMENT_MATCH_FOUND, 
+        dispatch({
+          type: ACTIONS.TOURNAMENT_MATCH_FOUND,
           payload: {
             matchId: data.matchId,
-            questions: data.questions,
+            questions: hydrateQuestions(data.questionIds),
             opponent: data.opponent,
             round: data.round,
             totalQuestions: data.totalQuestions,
@@ -799,15 +858,6 @@ export function GameProvider({ children }) {
     };
     socket.on('tournament_ended_info', onTournamentEndedInfo);
 
-    // Fetch initial special session state
-    fetch(`${BASE_URL}/admin/special-session`)
-      .then(res => res.json())
-      .then(data => {
-        dispatch({ type: 'SPECIAL_SESSION_UPDATED', payload: data });
-        localStorage.setItem('qd_special_session', JSON.stringify(data));
-      })
-      .catch(() => {});
-
     return () => {
       socket.off('match_found');
       socket.off('opponent_answered', onOpponentAnswered);
@@ -833,7 +883,7 @@ export function GameProvider({ children }) {
       socket.off('waiting_count',             onWaitingCount);
       socket.off('tournament_reset',          onTournamentReset);
       socket.off('force_reload',              onForceReload);
-      socket.off('special_session_updated',   onSpecialSessionUpdated);
+      socket.off('tournament_config_updated', onTournamentConfig);
       socket.off('state_sync',                onStateSync);
       socket.off('match_reconnected',         onMatchReconnected);
       socket.off('opponent_reconnected',      onOpponentReconnected);
@@ -861,24 +911,12 @@ export function GameProvider({ children }) {
     // Connect & register
     if (!socket.connected) socket.connect();
     const sessionToken = getOrCreateSessionToken();
-    // Check if this is Bible quiz (special session) AND if it's activated by admin
-    const isOnSpecialRoute = window.location.pathname.includes('/special') || 
-                             window.location.pathname.includes('/bible') ||
-                             window.location.hash.includes('special') ||
-                             window.location.hash.includes('bible');
-    // Only set isSpecialSession if admin has activated it
-    let specialActive = false;
-    try {
-      const ss = JSON.parse(localStorage.getItem('qd_special_session') || 'null');
-      specialActive = ss?.active || false;
-    } catch (_) {}
-    const isSpecialSession = isOnSpecialRoute && specialActive;
 
     // Set reconnection context so socket can auto-rejoin on reconnect
-    setReconnectContext({ deviceId, sessionToken, username, isSpecialSession });
+    setReconnectContext({ deviceId, sessionToken, username });
 
     socket.emit('register_device', { deviceId, sessionToken });
-    socket.emit('join_lobby', { deviceId, username, sessionToken, isSpecialSession });
+    socket.emit('join_lobby', { deviceId, username, sessionToken });
 
     // Anti-stuck: if in lobby for more than 30s without any update, request resync
     stuckTimeoutRef.current = setInterval(() => {

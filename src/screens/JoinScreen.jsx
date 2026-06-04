@@ -66,37 +66,6 @@ export default function JoinScreen() {
     { icon: Zap,   label: 'Matches',  value: '4,500+' },
   ];
 
-  // If special session is active, redirect to Bible quiz
-  if (state.specialSessionActive) {
-    return (
-      <div className="min-h-screen bg-[#0a0a1a] flex flex-col items-center justify-center p-4">
-        <div className="bg-white/10 backdrop-blur-md border-2 border-yellow-400/30 rounded-3xl p-8 max-w-md w-full text-center shadow-2xl">
-          <div className="mb-6">
-            <div className="w-32 h-32 mx-auto mb-4 rounded-full bg-gradient-to-br from-yellow-600 to-amber-600 flex items-center justify-center shadow-xl">
-              <Trophy className="w-16 h-16 text-white" />
-            </div>
-            <h1 className="text-3xl font-bold text-yellow-400 mb-2">Bible Quiz Active</h1>
-            <p className="text-white/80">Prophet Emmanuel's 71st Birthday Tournament</p>
-          </div>
-
-          <div className="bg-yellow-500/20 border-2 border-yellow-400/50 rounded-xl p-6 mb-4">
-            <h2 className="text-xl font-bold text-white mb-2">🎉 Special Event in Progress</h2>
-            <p className="text-white/80 text-sm">
-              The Bible Quiz tournament is currently active. Normal quiz is temporarily unavailable.
-            </p>
-          </div>
-
-          <button
-            onClick={() => window.location.href = '/special'}
-            className="w-full bg-gradient-to-r from-yellow-600 via-amber-600 to-yellow-700 hover:from-yellow-500 hover:via-amber-500 hover:to-yellow-600 text-white font-bold py-3 px-6 rounded-xl transition-all"
-          >
-            📖 Join Bible Quiz Tournament
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-[#0a0a1a] bg-grid flex flex-col items-center justify-center p-4 relative overflow-hidden">
       <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-purple-600/20 rounded-full blur-3xl animate-pulse" />
@@ -244,15 +213,12 @@ export default function JoinScreen() {
             ⚔️ Join Match Now
           </button>
 
-          {/* Bible Quiz Button - Only show when special session is NOT active */}
-          {!state.specialSessionActive && (
-            <button
-              onClick={() => window.location.href = '/special'}
-              className="w-full mt-3 py-4 rounded-2xl font-bold text-lg text-white transition-all duration-300 transform hover:scale-[1.02] active:scale-95 shadow-xl bg-gradient-to-r from-yellow-600 via-amber-600 to-yellow-700 hover:from-yellow-500 hover:via-amber-500 hover:to-yellow-600"
-            >
-              📖 Bible Quiz Tournament
-            </button>
-          )}
+          <button
+            onClick={() => window.location.href = '/tournament'}
+            className="w-full mt-3 py-4 rounded-2xl font-bold text-lg text-white transition-all duration-300 transform hover:scale-[1.02] active:scale-95 shadow-xl bg-gradient-to-r from-yellow-600 via-amber-600 to-yellow-700 hover:from-yellow-500 hover:via-amber-500 hover:to-yellow-600"
+          >
+            🏆 Knockout Tournament
+          </button>
 
           <div className="mt-6 rounded-2xl bg-gradient-to-r from-amber-500/10 to-yellow-500/10 border border-amber-500/20 p-4">
             <div className="flex items-center gap-2 mb-2">

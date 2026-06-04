@@ -1,50 +1,58 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Trophy, Zap, Crown, Flame, Users, Swords, Timer, Star, TrendingUp, Activity, Radio } from 'lucide-react';
 import { io } from 'socket.io-client';
-import babaapete from '../assets/babaapete.jpeg';
 import { BASE_URL as SOCKET_URL } from '../utils/api';
 
 /**
- * SpecialViewScreen — Admin / big-screen spectator view.
+ * ViewScreen — Admin / big-screen spectator view.
  *
  * Shows:
- *  • Opening banner with babaapete background
- *  • Live match grid: username VS username cards (updates every ~2s from socket)
+ *  • Big round banner (Round N / Quarter Final / Semi Final / Final / Champion)
+ *  • Live match grid: username VS username cards
  *  • Elimination pop-out animations (slide-in, hold 2s, fade out)
- *  • "Merge" animation when both players answer correctly (they converge)
- *  • Leaderboard: top-3 with podium, ranks 4-10 below
+ *  • "Merge" animation when both players answer correctly
+ *  • Leaderboard with frequent updates
  *
  * Connects to the server socket as a "view-only" spectator.
  */
 
 // ─── Eviction Toast (full-width dramatic banner) ─────────────────────────────
-function EvictionToast({ username, onDone }) {
+// Tightened to ~1.4 s total so a flurry of evictions clears fast.
+function EvictionToast({ username, onDone, index = 0 }) {
   const [phase, setPhase] = useState(0); // 0=hidden 1=slam-in 2=hold 3=fade
 
   useEffect(() => {
-    const t1 = setTimeout(() => setPhase(1), 40);
-    const t2 = setTimeout(() => setPhase(2), 500);
-    const t3 = setTimeout(() => setPhase(3), 3000);
-    const t4 = setTimeout(onDone, 3700);
+    const t1 = setTimeout(() => setPhase(1), 20);
+    const t2 = setTimeout(() => setPhase(2), 260);
+    const t3 = setTimeout(() => setPhase(3), 1100);
+    const t4 = setTimeout(onDone, 1400);
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); };
   }, [onDone]);
 
   const visible = phase === 1 || phase === 2;
 
+  // Stacked offset so multiple toasts pile up cleanly
+  const topPct = 8 + index * 6;
+  const baseTransform = visible
+    ? 'translateY(0) scale(1)'
+    : phase === 3
+    ? 'translateY(-20px) scale(0.95)'
+    : 'translateY(-80px) scale(0.7)';
+
   return (
     <div
       className="fixed inset-x-0 pointer-events-none z-50 flex flex-col items-center"
       style={{
-        top: '8%',
-        transform: visible ? 'translateY(0) scale(1)' : phase === 3 ? 'translateY(-20px) scale(0.95)' : 'translateY(-80px) scale(0.7)',
+        top: `${topPct}%`,
+        transform: baseTransform,
         opacity: phase === 3 ? 0 : phase >= 1 ? 1 : 0,
-        transition: phase === 1 ? 'all 0.45s cubic-bezier(0.34,1.56,0.64,1)' : 'all 0.6s ease-in',
+        transition: phase === 1 ? 'all 0.32s cubic-bezier(0.34,1.56,0.64,1)' : 'all 0.3s ease-in',
       }}
     >
-      {/* Red flash overlay */}
-      {phase === 1 && (
+      {/* Red flash overlay — only on the first toast in the stack */}
+      {phase === 1 && index === 0 && (
         <div className="fixed inset-0 pointer-events-none"
-          style={{ background: 'rgba(239,68,68,0.12)', animation: 'ping 0.4s ease-out 1' }} />
+          style={{ background: 'rgba(239,68,68,0.12)', animation: 'ping 0.3s ease-out 1' }} />
       )}
       {/* Main banner */}
       <div
@@ -86,10 +94,10 @@ function MergeToast({ p1, p2, onDone }) {
   const [phase, setPhase] = useState(0);
 
   useEffect(() => {
-    const t1 = setTimeout(() => setPhase(1), 50);
-    const t2 = setTimeout(() => setPhase(2), 600);
-    const t3 = setTimeout(() => setPhase(3), 1400);
-    const t4 = setTimeout(onDone, 2200);
+    const t1 = setTimeout(() => setPhase(1), 30);
+    const t2 = setTimeout(() => setPhase(2), 320);
+    const t3 = setTimeout(() => setPhase(3), 800);
+    const t4 = setTimeout(onDone, 1200);
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); };
   }, [onDone]);
 
@@ -314,11 +322,18 @@ function LeaderboardPanel({ players }) {
     <div className="rounded-2xl overflow-hidden"
       style={{ background: 'rgba(10,5,30,0.8)', border: '1px solid rgba(251,191,36,0.25)', backdropFilter: 'blur(16px)' }}>
       {/* Header */}
-      <div className="px-4 py-3 flex items-center gap-2"
-        style={{ background: 'linear-gradient(135deg, rgba(217,119,6,0.25), rgba(167,139,250,0.2))', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-        <Trophy className="w-5 h-5 text-amber-400" />
-        <span className="text-white font-black text-sm">LEADERBOARD</span>
-        <span className="ml-auto text-gray-400 text-xs">{sorted.length} players</span>
+      <div className="px-5 py-4 flex items-center gap-3"
+        style={{ background: 'linear-gradient(135deg, rgba(217,119,6,0.3), rgba(167,139,250,0.22))', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+        <Trophy className="w-7 h-7 text-amber-400" style={{ filter: 'drop-shadow(0 0 10px rgba(251,191,36,0.7))' }} />
+        <span className="text-white uppercase tracking-widest"
+          style={{
+            fontWeight: 900,
+            fontSize: 'clamp(1.1rem, 1.5vw, 1.6rem)',
+            textShadow: '0 0 14px rgba(251,191,36,0.55)',
+          }}>
+          LEADERBOARD
+        </span>
+        <span className="ml-auto text-amber-200 text-sm font-bold">{sorted.length} players</span>
       </div>
 
       <div className="p-4">
@@ -387,7 +402,7 @@ const TICKER_MESSAGES = [
   '💥 No mercy — the tournament runs on pure knowledge!',
   '🎯 Speed AND accuracy — both matter here!',
   '🚀 Top players are pulling ahead — can anyone catch them?',
-  '🌟 Happy 71st Birthday to Baba Apete!',
+  '🌟 Stay sharp — the bracket is heating up!',
   '📣 The crowd is watching — give it your best!',
   '⚔️  Battle after battle — who will still be standing?',
 ];
@@ -408,19 +423,29 @@ function LiveTicker() {
   }, []);
 
   return (
-    <div className="flex items-center gap-3 overflow-hidden"
-      style={{ background: 'rgba(0,0,0,0.35)', borderTop: '1px solid rgba(251,191,36,0.2)', borderBottom: '1px solid rgba(251,191,36,0.2)', padding: '6px 20px' }}>
-      <div className="flex items-center gap-1.5 shrink-0">
-        <Radio className="w-3 h-3 text-red-400 animate-pulse" />
-        <span className="text-red-400 text-xs font-black uppercase tracking-widest">LIVE</span>
+    <div className="flex items-center gap-4 overflow-hidden"
+      style={{
+        background: 'rgba(0,0,0,0.45)',
+        borderTop: '2px solid rgba(251,191,36,0.35)',
+        borderBottom: '2px solid rgba(251,191,36,0.35)',
+        padding: '14px 24px',
+      }}>
+      <div className="flex items-center gap-2 shrink-0">
+        <Radio className="w-5 h-5 text-red-400 animate-pulse" />
+        <span className="text-red-400 font-black uppercase tracking-widest"
+          style={{ fontSize: 'clamp(1rem, 1.4vw, 1.4rem)' }}>LIVE</span>
       </div>
-      <div className="w-px h-4 shrink-0" style={{ background: 'rgba(255,255,255,0.2)' }} />
+      <div className="w-px h-8 shrink-0" style={{ background: 'rgba(255,255,255,0.25)' }} />
       <p
-        className="text-amber-200 text-xs font-semibold flex-1 truncate"
+        className="text-amber-100 flex-1 truncate"
         style={{
           opacity: visible ? 1 : 0,
           transform: visible ? 'translateX(0)' : 'translateX(20px)',
           transition: 'all 0.35s ease',
+          fontWeight: 900,
+          fontSize: 'clamp(1.25rem, 2vw, 2rem)',
+          letterSpacing: '0.01em',
+          textShadow: '0 0 14px rgba(251,191,36,0.55)',
         }}
       >
         {TICKER_MESSAGES[idx]}
@@ -473,14 +498,21 @@ function ActivityFeed({ activities }) {
   };
 
   return (
-    <div className="w-56 shrink-0 flex flex-col rounded-2xl overflow-hidden"
+    <div className="w-64 shrink-0 flex flex-col rounded-2xl overflow-hidden"
       style={{ background: 'rgba(10,5,30,0.8)', border: '1px solid rgba(251,191,36,0.2)', backdropFilter: 'blur(16px)', maxHeight: 'calc(100vh - 260px)' }}>
       {/* Header */}
-      <div className="px-3 py-2.5 flex items-center gap-2 shrink-0"
-        style={{ background: 'linear-gradient(135deg, rgba(239,68,68,0.2), rgba(34,197,94,0.15))', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-        <Activity className="w-4 h-4 text-amber-400" />
-        <span className="text-white font-black text-xs uppercase tracking-wider">Live Activity</span>
-        <span className="ml-auto text-gray-400 text-xs">{activities.length}</span>
+      <div className="px-4 py-3 flex items-center gap-2 shrink-0"
+        style={{ background: 'linear-gradient(135deg, rgba(239,68,68,0.22), rgba(34,197,94,0.18))', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+        <Activity className="w-6 h-6 text-amber-400" style={{ filter: 'drop-shadow(0 0 8px rgba(251,191,36,0.6))' }} />
+        <span className="text-white uppercase tracking-widest"
+          style={{
+            fontWeight: 900,
+            fontSize: 'clamp(1rem, 1.3vw, 1.4rem)',
+            textShadow: '0 0 12px rgba(251,191,36,0.5)',
+          }}>
+          Live Activity
+        </span>
+        <span className="ml-auto text-amber-200 text-sm font-bold">{activities.length}</span>
       </div>
 
       {/* Scrollable activity list */}
@@ -547,7 +579,7 @@ function HypeBurst({ active }) {
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-export default function SpecialViewScreen({ embedded = false }) {
+export default function ViewScreen({ embedded = false }) {
   const [connected, setConnected] = useState(false);
   const [matches, setMatches] = useState([]);
   const [players, setPlayers] = useState([]);
@@ -559,6 +591,9 @@ export default function SpecialViewScreen({ embedded = false }) {
   const [hype, setHype] = useState(false);
   const [totalEvictions, setTotalEvictions] = useState(0);
   const [activityLog, setActivityLog] = useState([]); // Combined activity feed
+  const [currentRound, setCurrentRound] = useState({ round: 0, roundLabel: 'Waiting…', matchCount: 0, playerCount: 0 });
+  const [championBanner, setChampionBanner] = useState(null); // { username, rewardAmount }
+  const [rewardAmount, setRewardAmount] = useState('');
   const socketRef = useRef(null);
   const nextId = useRef(0);
   const TOURNEY_MAX_SECS = 45 * 60; // 45 minutes
@@ -586,12 +621,19 @@ export default function SpecialViewScreen({ embedded = false }) {
   const tourneyPct = Math.min(100, (tourneyElapsed / TOURNEY_MAX_SECS) * 100);
   const tourneyExpired = tourneyElapsed >= TOURNEY_MAX_SECS;
 
+  const MAX_QUEUE = 30;
   const addElim = useCallback((username) => {
-    setElimQueue(q => [...q, { id: nextId.current++, username }]);
+    setElimQueue(q => {
+      const next = [...q, { id: nextId.current++, username }];
+      return next.length > MAX_QUEUE ? next.slice(next.length - MAX_QUEUE) : next;
+    });
   }, []);
 
   const addMerge = useCallback((p1, p2) => {
-    setMergeQueue(q => [...q, { id: nextId.current++, p1, p2 }]);
+    setMergeQueue(q => {
+      const next = [...q, { id: nextId.current++, p1, p2 }];
+      return next.length > MAX_QUEUE ? next.slice(next.length - MAX_QUEUE) : next;
+    });
   }, []);
 
   useEffect(() => {
@@ -675,6 +717,29 @@ export default function SpecialViewScreen({ embedded = false }) {
       if (Array.isArray(data)) setPlayers(data);
     });
 
+    // Big round banner updates
+    sock.on('tournament_round_started', ({ round, roundLabel, matchCount, playerCount }) => {
+      setCurrentRound({ round, roundLabel: roundLabel || `Round ${round}`, matchCount, playerCount });
+      addActivity('round_started', { round, roundLabel, matchCount, playerCount });
+    });
+    sock.on('round_started', ({ round, roundLabel, matchCount, playerCount }) => {
+      setCurrentRound({ round, roundLabel: roundLabel || `Round ${round}`, matchCount, playerCount });
+    });
+    sock.on('tournament_started', ({ round, roundLabel, playerCount, rewardAmount: r }) => {
+      setCurrentRound({ round: round || 1, roundLabel: roundLabel || `Round ${round || 1}`, matchCount: 0, playerCount: playerCount || 0 });
+      if (typeof r === 'string') setRewardAmount(r);
+    });
+    sock.on('tournament_next_round', ({ round, roundLabel, playerCount }) => {
+      setCurrentRound({ round, roundLabel: roundLabel || `Round ${round}`, matchCount: 0, playerCount: playerCount || 0 });
+    });
+    sock.on('tournament_champion', ({ username, rewardAmount: r }) => {
+      setChampionBanner({ username, rewardAmount: r || '' });
+      addActivity('champion', { username, rewardAmount: r });
+    });
+    sock.on('tournament_config_updated', ({ rewardAmount: r }) => {
+      if (typeof r === 'string') setRewardAmount(r);
+    });
+
     return () => sock.disconnect();
   }, [addElim, addMerge, addActivity]);
 
@@ -682,11 +747,9 @@ export default function SpecialViewScreen({ embedded = false }) {
     <div className={`${embedded ? 'h-full' : 'min-h-screen'} relative overflow-hidden flex flex-col`}
       style={embedded ? { minHeight: '600px' } : undefined}>
 
-      {/* ── Background photo with overlay ── */}
-      <div className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-        style={{ backgroundImage: `url(${babaapete})` }} />
+      {/* ── Dark gradient background ── */}
       <div className="absolute inset-0"
-        style={{ background: 'linear-gradient(160deg, rgba(5,0,20,0.62) 0%, rgba(60,5,45,0.55) 50%, rgba(5,0,20,0.70) 100%)' }} />
+        style={{ background: 'linear-gradient(160deg, #0a0518 0%, #1e0a3a 50%, #0a0518 100%)' }} />
       <div className="absolute inset-0"
         style={{ background: 'radial-gradient(ellipse 80% 40% at 50% 10%, rgba(217,119,6,0.15) 0%, transparent 60%)' }} />
 
@@ -707,13 +770,29 @@ export default function SpecialViewScreen({ embedded = false }) {
       {/* ── Hype burst particles ── */}
       <HypeBurst active={hype} />
 
-      {/* ── Eviction & Merge toasts ── */}
-      {elimQueue[0] && (
+      {/* ── Eviction toasts (up to 3 stacked) ── */}
+      {elimQueue.slice(0, 3).map((entry, i) => (
         <EvictionToast
-          key={elimQueue[0].id}
-          username={elimQueue[0].username}
-          onDone={() => setElimQueue(q => q.slice(1))}
+          key={entry.id}
+          username={entry.username}
+          index={i}
+          onDone={() => setElimQueue(q => q.filter(x => x.id !== entry.id))}
         />
+      ))}
+      {/* Overflow badge when there are more queued */}
+      {elimQueue.length > 3 && (
+        <div className="fixed right-6 z-50 pointer-events-none"
+          style={{ top: '8%' }}>
+          <span className="text-xs font-black px-3 py-1.5 rounded-full"
+            style={{
+              background: 'rgba(239,68,68,0.25)',
+              border: '1px solid rgba(239,68,68,0.6)',
+              color: '#fecaca',
+              backdropFilter: 'blur(8px)',
+            }}>
+            +{elimQueue.length - 3} more
+          </span>
+        </div>
       )}
       {mergeQueue[0] && (
         <MergeToast
@@ -724,28 +803,62 @@ export default function SpecialViewScreen({ embedded = false }) {
         />
       )}
 
+      {/* ── Champion overlay (when champion is declared) ── */}
+      {championBanner && (
+        <div className="fixed inset-x-0 top-1/4 z-50 flex justify-center px-4 pointer-events-none">
+          <div className="px-10 py-6 rounded-3xl text-center"
+            style={{
+              background: 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 50%, #f59e0b 100%)',
+              boxShadow: '0 0 80px rgba(251,191,36,0.7), 0 0 160px rgba(251,191,36,0.35)',
+              border: '3px solid rgba(254,243,199,0.8)',
+            }}>
+            <div className="flex items-center justify-center gap-3 mb-2">
+              <Crown className="w-10 h-10 text-white" />
+              <p className="text-white font-black text-2xl uppercase tracking-widest">CHAMPION!</p>
+              <Crown className="w-10 h-10 text-white" />
+            </div>
+            <p className="text-white font-black text-5xl mb-1" style={{ textShadow: '0 0 24px rgba(0,0,0,0.4)' }}>
+              {championBanner.username}
+            </p>
+            {championBanner.rewardAmount && (
+              <p className="text-amber-50 font-bold text-lg">🏆 {championBanner.rewardAmount}</p>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── Main content ── */}
       <div className="relative z-10 flex flex-col h-full">
 
-        {/* Header banner */}
+        {/* Header banner — BIG ROUND NAME */}
         <div className="px-6 pt-5 pb-4 text-center"
           style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-          <div className="flex items-center justify-center gap-3 mb-1">
-            <Crown className="w-7 h-7 text-amber-400" style={{ filter: 'drop-shadow(0 0 10px #fbbf24)' }} />
+          <div className="flex items-center justify-center gap-4 mb-1">
+            <Crown className="w-10 h-10 text-amber-400" style={{ filter: 'drop-shadow(0 0 14px #fbbf24)' }} />
             <div className="text-center">
-              <p className="font-black text-xl" style={{
-                background: 'linear-gradient(135deg, #fbbf24, #fde68a, #f59e0b)',
-                WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
-                filter: 'drop-shadow(0 0 12px rgba(251,191,36,0.6))',
-              }}>PROPHET EMMANUEL OLUWOLE ADEWALE</p>
-              <p className="font-semibold text-sm italic" style={{
-                background: 'linear-gradient(135deg, #fbbf24, #fde68a)',
-                WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
-              }}>(Aka BABA APETE)</p>
+              <p className="text-amber-300 text-xs font-bold uppercase tracking-[0.35em] mb-1">Quiz Tournament — Live</p>
+              <p className="font-black uppercase tracking-tight"
+                style={{
+                  fontSize: 'clamp(2.5rem, 6vw, 4.5rem)',
+                  lineHeight: '1',
+                  background: 'linear-gradient(135deg, #fbbf24, #fde68a, #f59e0b)',
+                  WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
+                  filter: 'drop-shadow(0 0 18px rgba(251,191,36,0.8))',
+                }}>{currentRound.roundLabel}</p>
+              {currentRound.playerCount > 0 && (
+                <p className="text-gray-300 font-bold text-sm mt-2">
+                  {currentRound.playerCount} players • {currentRound.matchCount || Math.floor(currentRound.playerCount / 2)} live matches
+                </p>
+              )}
             </div>
-            <Crown className="w-7 h-7 text-amber-400" style={{ filter: 'drop-shadow(0 0 10px #fbbf24)' }} />
+            <Crown className="w-10 h-10 text-amber-400" style={{ filter: 'drop-shadow(0 0 14px #fbbf24)' }} />
           </div>
-          <p className="text-pink-300 font-bold text-sm tracking-widest uppercase">71st Birthday Quiz Tournament — Live View</p>
+          {rewardAmount && (
+            <p className="mt-2 inline-block px-3 py-1 rounded-full text-amber-200 font-bold text-sm"
+              style={{ background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.4)' }}>
+              💰 Grand Prize: {rewardAmount}
+            </p>
+          )}
 
           {/* Status bar */}
           <div className="flex items-center justify-center gap-4 mt-3 flex-wrap">
@@ -820,14 +933,27 @@ export default function SpecialViewScreen({ embedded = false }) {
             </div>
 
             {matches.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-48 text-center">
-                <div className="text-5xl mb-3" style={{ animation: 'bounce 1s infinite', filter: 'drop-shadow(0 0 16px rgba(251,191,36,0.6))' }}>⚔️</div>
-                <p className="text-amber-300 font-black text-lg">
+              <div className="flex flex-col items-center justify-center h-64 text-center">
+                <div className="text-7xl mb-4" style={{ animation: 'bounce 1s infinite', filter: 'drop-shadow(0 0 20px rgba(251,191,36,0.7))' }}>⚔️</div>
+                <p className="text-amber-300 uppercase tracking-wide"
+                  style={{
+                    fontWeight: 900,
+                    fontSize: 'clamp(1.75rem, 3vw, 3rem)',
+                    lineHeight: 1.1,
+                    textShadow: '0 0 18px rgba(251,191,36,0.6)',
+                  }}>
                   {lobbyCount < 2
                     ? 'Waiting for players to join...'
                     : 'Tournament starting...'}
                 </p>
-                <p className="text-gray-500 text-xs mt-1">{lobbyCount} player{lobbyCount !== 1 ? 's' : ''} ready</p>
+                <p className="text-white mt-3"
+                  style={{
+                    fontWeight: 900,
+                    fontSize: 'clamp(1rem, 1.6vw, 1.5rem)',
+                    letterSpacing: '0.02em',
+                  }}>
+                  {lobbyCount} player{lobbyCount !== 1 ? 's' : ''} ready
+                </p>
                 {/* Lobby player dots */}
                 {lobbyCount > 0 && (
                   <div className="flex items-center gap-2 mt-4 flex-wrap justify-center">

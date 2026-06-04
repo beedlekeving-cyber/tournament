@@ -58,14 +58,14 @@ socket.on('connect', () => {
   
   // Re-register device after reconnection
   if (reconnectContext) {
-    const { deviceId, sessionToken, username, isSpecialSession } = reconnectContext;
+    const { deviceId, sessionToken, username } = reconnectContext;
     socket.emit('register_device', { deviceId, sessionToken });
-    
+
     // Only emit join_lobby if cooldown has passed (prevent spam on reconnect loops)
     const now = Date.now();
     if (username && (now - lastJoinLobbyTime > JOIN_LOBBY_COOLDOWN)) {
       lastJoinLobbyTime = now;
-      socket.emit('join_lobby', { deviceId, username, sessionToken, isSpecialSession });
+      socket.emit('join_lobby', { deviceId, username, sessionToken });
     }
     // Request current state sync
     socket.emit('request_state_sync', { deviceId });
