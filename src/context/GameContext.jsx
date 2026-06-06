@@ -396,6 +396,11 @@ function gameReducer(state, action) {
       };
 
     case ACTIONS.TOURNAMENT_MATCH_FOUND:
+      // Safety: an eliminated/champion player must never be re-entered into a
+      // match. If a stale match_found arrives, ignore it.
+      if (['champion','eliminated','tournament_ended','no_winner'].includes(state.tournament.phase)) {
+        return state;
+      }
       return {
         ...state,
         tournament: {
@@ -454,6 +459,12 @@ function gameReducer(state, action) {
       return { ...state, tournament: { ...state.tournament, phase: 'eliminated' } };
 
     case ACTIONS.TOURNAMENT_NEXT_ROUND:
+      // If THIS player is already done (eliminated / champion / etc), a
+      // tournament-wide "next round" broadcast (from a different match still
+      // running) must NOT bounce them off their result screen.
+      if (['champion','eliminated','tournament_ended','no_winner'].includes(state.tournament.phase)) {
+        return state;
+      }
       return {
         ...state,
         tournament: {
