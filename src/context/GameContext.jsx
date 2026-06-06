@@ -349,7 +349,14 @@ function gameReducer(state, action) {
         waitingCount: sync.waitingCount ?? state.waitingCount,
         tournamentStarted: sync.tournamentStarted ?? state.tournamentStarted,
         scheduledDate: sync.scheduledDate ?? state.scheduledDate,
-        tournament: sync.tournament ? { ...state.tournament, ...sync.tournament } : state.tournament,
+        // Once we've reached a terminal phase (champion, eliminated, tournament_ended,
+        // no_winner), DO NOT let a background state_sync rewind the UI — they should
+        // stay on their result screen (e.g. champion chatting with admin).
+        tournament: (
+          ['champion','eliminated','tournament_ended','no_winner'].includes(state.tournament.phase)
+        )
+          ? state.tournament
+          : (sync.tournament ? { ...state.tournament, ...sync.tournament } : state.tournament),
       };
     }
 
