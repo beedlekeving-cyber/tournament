@@ -354,6 +354,12 @@ function gameReducer(state, action) {
     }
 
     case ACTIONS.TOURNAMENT_COUNTDOWN_WARNING:
+      // Before the tournament has actually started, do NOT switch to the
+      // "Finding your opponent" waiting screen. Just keep the player on the
+      // registration screen — the scheduled countdown there is enough.
+      if (!state.tournamentStarted) {
+        return { ...state, tournament: { ...state.tournament, countdownWarning: action.payload.message } };
+      }
       return { ...state, tournament: { ...state.tournament, phase: 'countdown_warning', countdownWarning: action.payload.message } };
 
     case ACTIONS.TOURNAMENT_STARTED:
@@ -470,7 +476,10 @@ function gameReducer(state, action) {
       return { ...state, tournament: { ...state.tournament, phase: 'tournament_ended', championUsername: action.payload.username, isChampion: false } };
 
     case 'TOURNAMENT_NO_WINNER':
-      // All players eliminated, no champion
+      // All players eliminated, no champion.
+      // If THIS player is already eliminated, keep them on the Eliminated screen
+      // instead of replacing it with a separate "no champion" message.
+      if (state.tournament.phase === 'eliminated') return state;
       return { ...state, tournament: { ...state.tournament, phase: 'no_winner', noWinnerMessage: action.payload.message } };
 
     case 'TOURNAMENT_IN_PROGRESS_BLOCKED':

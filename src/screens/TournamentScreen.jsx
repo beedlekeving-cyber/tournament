@@ -875,6 +875,8 @@ export default function TournamentScreen() {
     <div className="min-h-screen flex flex-col items-center justify-center p-4 relative"
       style={{ background: 'linear-gradient(160deg, #0a0518 0%, #1e0a3a 100%)' }}>
 
+      {tournament.countdownWarning && <TournamentCountdownBanner message={tournament.countdownWarning} />}
+
       {/* Header */}
       <div className="w-full max-w-md text-center mb-6">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full mb-3"
