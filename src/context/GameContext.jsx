@@ -128,6 +128,7 @@ const ACTIONS = {
   TOURNAMENT_CHAMPION: 'TOURNAMENT_CHAMPION',
   TOURNAMENT_NEXT_QUESTION: 'TOURNAMENT_NEXT_QUESTION',
   TOURNAMENT_BYE: 'TOURNAMENT_BYE',
+  TOURNAMENT_FINAL_NOTICE: 'TOURNAMENT_FINAL_NOTICE',
 };
 
 function gameReducer(state, action) {
@@ -425,6 +426,9 @@ function gameReducer(state, action) {
 
     case ACTIONS.TOURNAMENT_ROUND_WON:
       return { ...state, tournament: { ...state.tournament, phase: 'round_won', round: action.payload.nextRound || state.tournament.round + 1 } };
+
+    case ACTIONS.TOURNAMENT_FINAL_NOTICE:
+      return { ...state, tournament: { ...state.tournament, finalNotice: action.payload.message } };
 
     case ACTIONS.TOURNAMENT_ELIMINATED:
       return { ...state, tournament: { ...state.tournament, phase: 'eliminated' } };
@@ -792,6 +796,10 @@ export function GameProvider({ children }) {
     socket.on('tournament_round_won',   onTournamentRoundWon);
     socket.on('tournament_eliminated',  onTournamentEliminated);
     socket.on('tournament_next_round',  onTournamentNextRound);
+    socket.on('tournament_final_notice', ({ message, round }) => {
+      console.log('[TOURNAMENT] final_notice:', { message, round });
+      dispatch({ type: ACTIONS.TOURNAMENT_FINAL_NOTICE, payload: { message } });
+    });
     socket.on('tournament_champion',    onTournamentChampion);
     socket.on('you_are_champion',       onYouAreChampion);
     socket.on('next_question',          onNextQuestion);

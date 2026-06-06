@@ -255,7 +255,7 @@ function TournamentWaitingMatch({ roundLabel, activeCount, registeredCount }) {
 }
 
 // ─── Sub-component: Round-won (strict gating message) ───────────────────────
-function TournamentRoundWon({ nextRoundLabel }) {
+function TournamentRoundWon({ nextRoundLabel, finalNotice }) {
   return (
     <div className="fixed inset-0 z-40 flex flex-col items-center justify-center p-4"
       style={{ background: 'linear-gradient(160deg, rgba(5,20,10,0.97) 0%, rgba(10,40,20,0.97) 100%)' }}>
@@ -265,6 +265,9 @@ function TournamentRoundWon({ nextRoundLabel }) {
           <CheckCircle2 className="w-14 h-14 text-white" />
         </div>
         <h2 className="text-4xl font-black text-green-400 mb-2">You Won!</h2>
+        {finalNotice ? (
+          <p className="text-yellow-300 text-xl font-bold mb-3">{finalNotice}</p>
+        ) : null}
         <p className="text-white text-lg mb-2">Waiting for {nextRoundLabel || 'the next round'}…</p>
         <p className="text-gray-400 text-sm mb-6">All matches in this round must finish before the next pairing.</p>
         <div className="flex justify-center gap-2">
@@ -810,7 +813,7 @@ export default function TournamentScreen() {
     return <TournamentEliminated username={displayUsername} />;
   }
   if (tournament.phase === 'round_won') {
-    return <TournamentRoundWon nextRoundLabel={tournament.roundLabel} />;
+    return <TournamentRoundWon nextRoundLabel={tournament.roundLabel} finalNotice={tournament.finalNotice} />;
   }
   if (tournament.phase === 'bye') {
     return <TournamentBye roundLabel={tournament.roundLabel} message={tournament.byeMessage} />;
