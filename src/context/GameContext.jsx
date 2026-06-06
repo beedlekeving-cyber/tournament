@@ -361,6 +361,13 @@ function gameReducer(state, action) {
     }
 
     case ACTIONS.TOURNAMENT_COUNTDOWN_WARNING:
+      // Once the player has reached a terminal state for this tournament
+      // (champion, eliminated, tournament_ended, no_winner), a stale countdown
+      // banner from the original schedule must NOT bounce them back to a
+      // waiting screen.
+      if (['champion','eliminated','tournament_ended','no_winner'].includes(state.tournament.phase)) {
+        return state;
+      }
       // Before the tournament has actually started, do NOT switch to the
       // "Finding your opponent" waiting screen. Just keep the player on the
       // registration screen — the scheduled countdown there is enough.
