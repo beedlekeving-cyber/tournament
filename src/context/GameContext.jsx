@@ -487,7 +487,7 @@ function gameReducer(state, action) {
       return { ...state, tournament: { ...state.tournament, phase: 'blocked', blockedMessage: action.payload.message } };
 
     case ACTIONS.TOURNAMENT_NEXT_QUESTION: {
-      const { questionIndex, question, totalQuestions } = action.payload;
+      const { questionIndex, question, totalQuestions, questionTime, isHard } = action.payload;
       // Replace or append the server-provided question at the given index
       const updatedQuestions = [...state.tournament.matchQuestions];
       if (question) updatedQuestions[questionIndex] = question;
@@ -500,6 +500,10 @@ function gameReducer(state, action) {
           myAnswer: null,
           roundResult: null,
           bothCorrectFeedback: true,
+          isHardQuestion: !!isHard,
+          // Use the per-question time when the server provides one (e.g. shorter
+          // for "hard" after both-correct); otherwise keep the match default.
+          questionTime: questionTime || state.tournament.questionTime,
           // Update totalQuestions if server provides a revised count
           totalQuestions: totalQuestions || state.tournament.totalQuestions,
         },
@@ -775,12 +779,12 @@ export function GameProvider({ children }) {
     // Prefer the inline `question` object from the server; fall back to hydrating
     // from the local bank cache by questionId (legacy path).
     // Delay the dispatch by 1.5 s so TournamentMatch can show the answer reveal first.
-    const onNextQuestion = ({ questionIndex, questionId, question: inlineQuestion, bothCorrectCount, bothWrongCount, message, totalQuestions }) => {
-      console.log('[TOURNAMENT] next_question:', { questionIndex, questionId, hasInline: !!inlineQuestion, bothCorrectCount, bothWrongCount, totalQuestions, message });
+    const onNextQuestion = ({ questionIndex, questionId, question: inlineQuestion, bothCorrectCount, bothWrongCount, message, totalQuestions, questionTime, isHard }) => {
+      console.log('[TOURNAMENT] next_question:', { questionIndex, questionId, hasInline: !!inlineQuestion, bothCorrectCount, bothWrongCount, totalQuestions, questionTime, isHard, message });
       const question = inlineQuestion || hydrateQuestion(questionId);
       const delayMs = bothWrongCount ? 500 : 1500;
       setTimeout(() => {
-        dispatch({ type: ACTIONS.TOURNAMENT_NEXT_QUESTION, payload: { questionIndex, question, bothCorrectCount, message, totalQuestions } });
+        dispatch({ type: ACTIONS.TOURNAMENT_NEXT_QUESTION, payload: { questionIndex, question, bothCorrectCount, message, totalQuestions, questionTime, isHard } });
       }, delayMs);
     };
 
