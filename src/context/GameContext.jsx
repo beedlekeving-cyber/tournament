@@ -853,6 +853,19 @@ export function GameProvider({ children }) {
     };
     socket.on('tournament_no_winner', onTournamentNoWinner);
 
+    // Auto-start state: scheduled time fired but waiting for enough connected players
+    const onAutoStartPending = ({ message, registeredCount, activeCount, retryIn }) => {
+      console.log('[TOURNAMENT] auto_start_pending:', { message, registeredCount, activeCount, retryIn });
+      // Surface as a countdown-style banner so the user sees something is happening
+      dispatch({ type: ACTIONS.TOURNAMENT_COUNTDOWN_WARNING, payload: { message: message || `Waiting for players (${activeCount} online)…` } });
+    };
+    const onAutoStartFailed = ({ message, error }) => {
+      console.warn('[TOURNAMENT] auto_start_failed:', { message, error });
+      dispatch({ type: ACTIONS.TOURNAMENT_COUNTDOWN_WARNING, payload: { message: message || error || 'Tournament could not start.' } });
+    };
+    socket.on('tournament_auto_start_pending', onAutoStartPending);
+    socket.on('tournament_auto_start_failed', onAutoStartFailed);
+
     socket.on('tournament_waiting',          onTournamentWaiting);
     socket.on('waiting_count',              onWaitingCount);
     socket.on('tournament_reset',           onTournamentReset);
