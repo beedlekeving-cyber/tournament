@@ -27,6 +27,19 @@ function TournamentMatch({
 
   const q = questions[currentQuestionIndex];
 
+  // Safety: never auto-submit (and never crash on `q.question`) when the
+  // question hasn't arrived yet. Better to wait visually than be auto-eliminated.
+  if (!q) {
+    return (
+      <div className="fixed inset-0 z-40 flex flex-col items-center justify-center p-4"
+        style={{ background: 'linear-gradient(160deg, rgba(10,5,30,0.97), rgba(30,5,60,0.97))' }}>
+        <div className="text-center">
+          <p className="text-amber-300 text-lg font-bold">Loading question…</p>
+        </div>
+      </div>
+    );
+  }
+
   useEffect(() => {
     setSelected(null);
     setShowResult(false);
@@ -215,7 +228,7 @@ function TournamentCountdownBanner({ message }) {
 }
 
 // ─── Sub-component: Waiting for match (Round N) ─────────────────────────────
-function TournamentWaitingMatch({ roundLabel, activeCount, registeredCount }) {
+function TournamentWaitingMatch({ roundLabel }) {
   return (
     <div className="fixed inset-0 z-40 flex flex-col items-center justify-center p-4"
       style={{ background: 'linear-gradient(160deg, rgba(10,5,30,0.97) 0%, rgba(30,5,60,0.97) 100%)' }}>
@@ -224,25 +237,7 @@ function TournamentWaitingMatch({ roundLabel, activeCount, registeredCount }) {
           style={{ background: 'linear-gradient(135deg, #d97706, #a78bfa)', boxShadow: '0 0 50px rgba(217,119,6,0.5)' }}>
           <Swords className="w-12 h-12 text-white" />
         </div>
-        <h2 className="text-3xl font-black text-white mb-2">{roundLabel || 'Round'}</h2>
-        <p className="text-amber-400 font-semibold text-lg mb-2">Finding your opponent…</p>
-        <p className="text-gray-400 text-sm">You will be matched automatically</p>
-        {(activeCount > 0 || registeredCount > 0) && (
-          <div className="flex items-center justify-center gap-3 mt-4">
-            {activeCount > 0 && (
-              <span className="text-xs font-bold px-3 py-1 rounded-full"
-                style={{ background: 'rgba(34,197,94,0.15)', color: '#4ade80', border: '1px solid rgba(34,197,94,0.3)' }}>
-                ⚡ {activeCount} online
-              </span>
-            )}
-            {registeredCount > 0 && (
-              <span className="text-xs font-bold px-3 py-1 rounded-full"
-                style={{ background: 'rgba(167,139,250,0.15)', color: '#a78bfa', border: '1px solid rgba(167,139,250,0.3)' }}>
-                👥 {registeredCount} registered
-              </span>
-            )}
-          </div>
-        )}
+        <h2 className="text-3xl font-black text-white mb-2">{roundLabel || 'Get Ready!'}</h2>
         <div className="flex justify-center gap-2 mt-6">
           {[0,1,2].map(i => (
             <div key={i} className="w-3 h-3 rounded-full bg-amber-400 animate-bounce"
@@ -631,7 +626,6 @@ export default function TournamentScreen() {
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState('');
   const [registeredCount, setRegisteredCount] = useState(0);
-  const [activeCount, setActiveCount] = useState(0);
   const [maxPlayers, setMaxPlayers] = useState(state.maxPlayers ?? 400);
   const [rewardAmount, setRewardAmount] = useState(state.rewardAmount || '');
   const [tournamentSchedule, setTournamentSchedule] = useState(null);
@@ -672,8 +666,7 @@ export default function TournamentScreen() {
       if (typeof count === 'number') setRegisteredCount(count);
       if (typeof max === 'number') setMaxPlayers(max);
     };
-    const onActive = ({ count, registered: regCount }) => {
-      if (typeof count === 'number') setActiveCount(count);
+    const onActive = ({ registered: regCount }) => {
       if (typeof regCount === 'number') setRegisteredCount(regCount);
     };
     const onConfig = ({ rewardAmount: r, maxPlayers: m }) => {
@@ -728,7 +721,6 @@ export default function TournamentScreen() {
       fetchTournamentSchedule().then(setTournamentSchedule).catch(() => {});
       fetchTournamentStatus().then((data) => {
         if (typeof data.registeredCount === 'number') setRegisteredCount(data.registeredCount);
-        if (typeof data.activeCount === 'number') setActiveCount(data.activeCount);
         if (typeof data.maxPlayers === 'number') setMaxPlayers(data.maxPlayers);
         if (typeof data.rewardAmount === 'string') setRewardAmount(data.rewardAmount);
       }).catch(() => {});
@@ -849,11 +841,7 @@ export default function TournamentScreen() {
     return (
       <>
         {tournament.countdownWarning && <TournamentCountdownBanner message={tournament.countdownWarning} />}
-        <TournamentWaitingMatch
-          roundLabel={tournament.roundLabel}
-          activeCount={activeCount}
-          registeredCount={registeredCount}
-        />
+        <TournamentWaitingMatch roundLabel={tournament.roundLabel} />
       </>
     );
   }
@@ -861,11 +849,7 @@ export default function TournamentScreen() {
     return (
       <>
         <TournamentCountdownBanner message={tournament.countdownWarning} />
-        <TournamentWaitingMatch
-          roundLabel={tournament.roundLabel}
-          activeCount={activeCount}
-          registeredCount={registeredCount}
-        />
+        <TournamentWaitingMatch roundLabel={tournament.roundLabel} />
       </>
     );
   }
