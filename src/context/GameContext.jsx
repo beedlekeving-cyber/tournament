@@ -708,12 +708,15 @@ export function GameProvider({ children }) {
       dispatch({ type: 'TOURNAMENT_STARTED' });
     };
 
-    const onTournamentMatchFound = ({ matchId, questionIds, opponent, round, roundLabel, totalQuestions, isTournament, preMatchCountdown, questionTime }) => {
+    const onTournamentMatchFound = ({ matchId, questionIds, questions: inlineQuestions, opponent, round, roundLabel, totalQuestions, isTournament, preMatchCountdown, questionTime }) => {
       if (!isTournament) return; // handled by the normal match_found listener above
-      const hydrated = hydrateQuestions(questionIds);
-      console.log('[TOURNAMENT] match_found:', { matchId, round, roundLabel, totalQuestions, opponent: opponent?.username, preMatchCountdown, questionTime, questionIdCount: questionIds?.length, hydrated: hydrated.length });
+      // Prefer inline questions sent by the server (race-free) over local-bank hydration.
+      const hydrated = (Array.isArray(inlineQuestions) && inlineQuestions.length > 0)
+        ? inlineQuestions
+        : hydrateQuestions(questionIds);
+      console.log('[TOURNAMENT] match_found:', { matchId, round, roundLabel, totalQuestions, opponent: opponent?.username, preMatchCountdown, questionTime, questionIdCount: questionIds?.length, inlineCount: inlineQuestions?.length, hydrated: hydrated.length });
       if (questionIds?.length && hydrated.length === 0) {
-        console.warn('[TOURNAMENT] match_found: question bank not yet loaded — match will render empty until bank arrives');
+        console.warn('[TOURNAMENT] match_found: NO questions available — match will render empty');
       }
       const opp = opponent ?? {};
       const countdown = preMatchCountdown || 5;
@@ -769,11 +772,12 @@ export function GameProvider({ children }) {
     };
 
     // next_question: server says both players answered the same — move to next question.
-    // Server sends questionId only; we hydrate from the cached bank.
+    // Prefer the inline `question` object from the server; fall back to hydrating
+    // from the local bank cache by questionId (legacy path).
     // Delay the dispatch by 1.5 s so TournamentMatch can show the answer reveal first.
-    const onNextQuestion = ({ questionIndex, questionId, bothCorrectCount, bothWrongCount, message, totalQuestions }) => {
-      console.log('[TOURNAMENT] next_question:', { questionIndex, questionId, bothCorrectCount, bothWrongCount, totalQuestions, message });
-      const question = hydrateQuestion(questionId);
+    const onNextQuestion = ({ questionIndex, questionId, question: inlineQuestion, bothCorrectCount, bothWrongCount, message, totalQuestions }) => {
+      console.log('[TOURNAMENT] next_question:', { questionIndex, questionId, hasInline: !!inlineQuestion, bothCorrectCount, bothWrongCount, totalQuestions, message });
+      const question = inlineQuestion || hydrateQuestion(questionId);
       const delayMs = bothWrongCount ? 500 : 1500;
       setTimeout(() => {
         dispatch({ type: ACTIONS.TOURNAMENT_NEXT_QUESTION, payload: { questionIndex, question, bothCorrectCount, message, totalQuestions } });
