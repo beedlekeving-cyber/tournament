@@ -407,7 +407,10 @@ const TICKER_MESSAGES = [
   '⚔️  Battle after battle — who will still be standing?',
 ];
 
-function LiveTicker() {
+function LiveTicker({ messages }) {
+  // Use dynamic Quiz Arena messages if provided, otherwise fall back to the
+  // hardcoded TICKER_MESSAGES.
+  const list = (Array.isArray(messages) && messages.length > 0) ? messages : TICKER_MESSAGES;
   const [idx, setIdx] = useState(0);
   const [visible, setVisible] = useState(true);
 
@@ -415,12 +418,12 @@ function LiveTicker() {
     const cycle = setInterval(() => {
       setVisible(false);
       setTimeout(() => {
-        setIdx(i => (i + 1) % TICKER_MESSAGES.length);
+        setIdx(i => (i + 1) % list.length);
         setVisible(true);
       }, 400);
     }, 4000);
     return () => clearInterval(cycle);
-  }, []);
+  }, [list.length]);
 
   return (
     <div className="flex items-center gap-4 overflow-hidden"
@@ -448,7 +451,7 @@ function LiveTicker() {
           textShadow: '0 0 14px rgba(251,191,36,0.55)',
         }}
       >
-        {TICKER_MESSAGES[idx]}
+        ⚡ {list[idx]}
       </p>
     </div>
   );
@@ -595,7 +598,6 @@ export default function ViewScreen({ embedded = false }) {
   const [championBanner, setChampionBanner] = useState(null); // { username, rewardAmount }
   const [rewardAmount, setRewardAmount] = useState('');
   const [edition, setEdition] = useState('Quiz Arena');
-  const [bannerIndex, setBannerIndex] = useState(0);
   const socketRef = useRef(null);
   const nextId = useRef(0);
   const TOURNEY_MAX_SECS = 45 * 60; // 45 minutes
@@ -639,13 +641,7 @@ export default function ViewScreen({ embedded = false }) {
     ];
   })();
 
-  useEffect(() => {
-    const t = setInterval(() => {
-      setBannerIndex(i => (i + 1) % announcementMessages.length);
-    }, 6000);
-    return () => clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [edition, currentRound.playerCount]);
+  // LiveTicker manages its own rotation internally — nothing to do here.
 
   const formatTourneyTime = (secs) => {
     const remaining = Math.max(0, TOURNEY_MAX_SECS - secs);
@@ -900,43 +896,12 @@ export default function ViewScreen({ embedded = false }) {
 
           {/* Status bar */}
           <div className="flex items-center justify-center gap-4 mt-3 flex-wrap">
-            {/* LIVE pill now hosts the rotating Quiz Arena announcement next to it */}
-            <div
-              className="flex items-center gap-3 px-4 py-1.5 rounded-full overflow-hidden"
-              style={{
-                background: connected
-                  ? 'linear-gradient(90deg, rgba(34,197,94,0.18), rgba(217,119,6,0.18), rgba(236,72,153,0.18))'
-                  : 'rgba(239,68,68,0.15)',
-                border: `1px solid ${connected ? 'rgba(251,191,36,0.45)' : 'rgba(239,68,68,0.4)'}`,
-                boxShadow: connected ? '0 0 18px rgba(251,191,36,0.25)' : 'none',
-                maxWidth: 'min(720px, 80vw)',
-              }}
-            >
-              <div className={`w-2 h-2 rounded-full shrink-0 ${connected ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`} />
-              <span className={`text-xs font-black shrink-0 ${connected ? 'text-green-300' : 'text-red-300'}`}>
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full"
+              style={{ background: connected ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)', border: `1px solid ${connected ? 'rgba(34,197,94,0.4)' : 'rgba(239,68,68,0.4)'}` }}>
+              <div className={`w-2 h-2 rounded-full ${connected ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`} />
+              <span className={`text-xs font-bold ${connected ? 'text-green-300' : 'text-red-300'}`}>
                 {connected ? '● LIVE' : 'Connecting...'}
               </span>
-              {connected && (
-                <span
-                  key={bannerIndex}
-                  className="text-amber-100 font-bold uppercase tracking-wider truncate"
-                  style={{
-                    fontSize: 'clamp(0.7rem, 1vw, 0.9rem)',
-                    animation: 'announce-fade 6s ease-in-out infinite',
-                    textShadow: '0 0 12px rgba(251,191,36,0.55)',
-                  }}
-                >
-                  ⚡ {announcementMessages[bannerIndex]}
-                </span>
-              )}
-              <style>{`
-                @keyframes announce-fade {
-                  0%   { opacity: 0; transform: translateY(4px); }
-                  10%  { opacity: 1; transform: translateY(0); }
-                  90%  { opacity: 1; transform: translateY(0); }
-                  100% { opacity: 0; transform: translateY(-4px); }
-                }
-              `}</style>
             </div>
             <div className="flex items-center gap-1.5 px-3 py-1 rounded-full"
               style={{ background: 'rgba(167,139,250,0.12)', border: '1px solid rgba(167,139,250,0.3)' }}>
@@ -979,6 +944,9 @@ export default function ViewScreen({ embedded = false }) {
             />
           </div>
         </div>
+
+        {/* Live commentary ticker (top of body — contains the rotating announcement) */}
+        <LiveTicker messages={announcementMessages} />
 
         {/* Body: LEADERBOARD (left) + matches (middle) + ACTIVITY (right) */}
         <div className="flex-1 flex gap-4 p-5 overflow-hidden">
