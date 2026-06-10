@@ -980,9 +980,6 @@ export default function ViewScreen({ embedded = false }) {
           </div>
         </div>
 
-        {/* Live commentary ticker */}
-        <LiveTicker />
-
         {/* Body: LEADERBOARD (left) + matches (middle) + ACTIVITY (right) */}
         <div className="flex-1 flex gap-4 p-5 overflow-hidden">
 
@@ -1007,7 +1004,7 @@ export default function ViewScreen({ embedded = false }) {
             </div>
 
             {matches.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-64 text-center">
+              <div className="flex flex-col items-center text-center">
                 <div className="text-7xl mb-4" style={{ animation: 'bounce 1s infinite', filter: 'drop-shadow(0 0 20px rgba(251,191,36,0.7))' }}>⚔️</div>
                 <p className="text-amber-300 uppercase tracking-wide"
                   style={{
@@ -1028,15 +1025,37 @@ export default function ViewScreen({ embedded = false }) {
                   }}>
                   {lobbyCount} player{lobbyCount !== 1 ? 's' : ''} ready
                 </p>
-                {/* Lobby player dots */}
+                {/* Lobby player tiles — scrollable when the lobby gets big (up to 400) */}
                 {lobbyCount > 0 && (
-                  <div className="flex items-center gap-2 mt-4 flex-wrap justify-center">
-                    {[...Array(Math.min(lobbyCount, 20))].map((_, i) => (
-                      <div key={i} className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black text-white animate-pulse"
-                        style={{ background: 'rgba(167,139,250,0.3)', border: '1px solid rgba(167,139,250,0.5)', animationDelay: `${i * 0.1}s` }}>
-                        {players[i]?.username?.[0]?.toUpperCase() || '?'}
-                      </div>
-                    ))}
+                  <div
+                    className="w-full max-w-3xl mt-4"
+                    style={{
+                      maxHeight: '55vh',
+                      overflowY: 'auto',
+                      padding: '6px 4px',
+                      borderRadius: 12,
+                      background: 'rgba(255,255,255,0.02)',
+                    }}
+                  >
+                    <div className="flex items-center gap-2 flex-wrap justify-center">
+                      {players.slice(0, lobbyCount).map((p, i) => (
+                        <div
+                          key={p.deviceId || p.username || i}
+                          className="rounded-xl flex items-center gap-1.5 px-2.5 py-1.5 text-white animate-pulse"
+                          style={{
+                            background: 'rgba(167,139,250,0.18)',
+                            border: '1px solid rgba(167,139,250,0.45)',
+                            animationDelay: `${(i % 20) * 0.08}s`,
+                          }}
+                        >
+                          <div className="w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-black"
+                            style={{ background: 'rgba(167,139,250,0.4)' }}>
+                            {p?.username?.[0]?.toUpperCase() || '?'}
+                          </div>
+                          <span className="text-xs font-bold truncate max-w-[120px]">{p?.username || `Player ${i+1}`}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>

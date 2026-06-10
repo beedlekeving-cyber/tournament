@@ -628,7 +628,7 @@ function TournamentBlocked({ message, title }) {
 
 // ─── Main Tournament Screen ─────────────────────────────────────────────────
 export default function TournamentScreen() {
-  const { state, submitTournamentAnswer } = useGame();
+  const { state, submitTournamentAnswer, dispatch } = useGame();
   const tournament = state.tournament;
   const [username, setUsername] = useState('');
   const [error, setError] = useState('');
@@ -732,6 +732,11 @@ export default function TournamentScreen() {
         if (typeof data.registeredCount === 'number') setRegisteredCount(data.registeredCount);
         if (typeof data.maxPlayers === 'number') setMaxPlayers(data.maxPlayers);
         if (typeof data.rewardAmount === 'string') setRewardAmount(data.rewardAmount);
+        // Persist edition into global state so the chip survives page refresh,
+        // not just live socket updates.
+        if (typeof data.edition === 'string' && data.edition) {
+          dispatch({ type: 'EDITION_UPDATED', payload: { edition: data.edition } });
+        }
       }).catch(() => {});
       fetchUserCount().then((n) => {
         if (typeof n === 'number') setRegisteredCount((c) => (c === 0 ? n : c));
