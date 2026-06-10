@@ -334,6 +334,9 @@ function gameReducer(state, action) {
     case 'REWARD_UPDATED':
       return { ...state, rewardAmount: action.payload.rewardAmount ?? state.rewardAmount };
 
+    case 'EDITION_UPDATED':
+      return { ...state, tournament: { ...state.tournament, edition: action.payload.edition ?? state.tournament.edition } };
+
     case 'CONNECTION_STATUS':
       return { ...state, isConnected: action.payload };
 
@@ -391,6 +394,7 @@ function gameReducer(state, action) {
           questionsPerMatch: action.payload.questionsPerMatch || 5,
           rewardAmount: action.payload.rewardAmount || state.rewardAmount || '',
           tournamentId: action.payload.tournamentId || state.tournament.tournamentId,
+          edition: action.payload.edition ?? state.tournament.edition,
           countdownWarning: null,
         },
       };
@@ -492,13 +496,25 @@ function gameReducer(state, action) {
           isChampion: true,
           rewardAmount: action.payload?.rewardAmount ?? state.tournament.rewardAmount ?? state.rewardAmount,
           tournamentId: action.payload?.tournamentId ?? state.tournament.tournamentId,
+          edition: action.payload?.edition ?? state.tournament.edition,
+          outlasted: action.payload?.outlasted ?? state.tournament.outlasted,
         },
       };
 
     case 'TOURNAMENT_ENDED':
       // This is broadcast to everyone when a champion is declared
       // Non-champions see this, champions see TOURNAMENT_CHAMPION
-      return { ...state, tournament: { ...state.tournament, phase: 'tournament_ended', championUsername: action.payload.username, isChampion: false } };
+      return {
+        ...state,
+        tournament: {
+          ...state.tournament,
+          phase: 'tournament_ended',
+          championUsername: action.payload.username,
+          isChampion: false,
+          edition: action.payload?.edition ?? state.tournament.edition,
+          outlasted: action.payload?.outlasted ?? state.tournament.outlasted,
+        },
+      };
 
     case 'TOURNAMENT_NO_WINNER':
       // All players eliminated, no champion.
@@ -694,6 +710,9 @@ export function GameProvider({ children }) {
     };
     const onTournamentConfig = (data) => {
       dispatch({ type: 'REWARD_UPDATED', payload: { rewardAmount: data.rewardAmount } });
+      if (data.edition) {
+        dispatch({ type: 'EDITION_UPDATED', payload: { edition: data.edition } });
+      }
     };
     const onTournamentReset = () => {
       dispatch({ type: ACTIONS.RESET_GAME });
@@ -814,19 +833,19 @@ export function GameProvider({ children }) {
     };
 
     // tournament_champion: broadcast to EVERYONE. Only the champion gets you_are_champion.
-    const onTournamentChampion = ({ username, deviceId, rewardAmount }) => {
+    const onTournamentChampion = ({ username, deviceId, rewardAmount, edition, outlasted, startedWith }) => {
       const myDeviceId = localStorage.getItem('qd_deviceId');
-      console.log('[TOURNAMENT] tournament_champion:', { username, deviceId, rewardAmount, isMe: deviceId === myDeviceId });
+      console.log('[TOURNAMENT] tournament_champion:', { username, deviceId, rewardAmount, edition, outlasted, isMe: deviceId === myDeviceId });
       if (deviceId === myDeviceId) {
-        dispatch({ type: ACTIONS.TOURNAMENT_CHAMPION, payload: { rewardAmount } });
+        dispatch({ type: ACTIONS.TOURNAMENT_CHAMPION, payload: { rewardAmount, edition, outlasted, startedWith } });
       } else {
-        dispatch({ type: 'TOURNAMENT_ENDED', payload: { username, deviceId, rewardAmount } });
+        dispatch({ type: 'TOURNAMENT_ENDED', payload: { username, deviceId, rewardAmount, edition, outlasted, startedWith } });
       }
     };
 
-    const onYouAreChampion = ({ rewardAmount, tournamentId } = {}) => {
-      console.log('[TOURNAMENT] you_are_champion!', { rewardAmount, tournamentId });
-      dispatch({ type: ACTIONS.TOURNAMENT_CHAMPION, payload: { rewardAmount, tournamentId } });
+    const onYouAreChampion = ({ rewardAmount, tournamentId, edition, outlasted, startedWith } = {}) => {
+      console.log('[TOURNAMENT] you_are_champion!', { rewardAmount, tournamentId, edition, outlasted });
+      dispatch({ type: ACTIONS.TOURNAMENT_CHAMPION, payload: { rewardAmount, tournamentId, edition, outlasted, startedWith } });
     };
 
     socket.on('tournament_countdown',   onTournamentCountdown);

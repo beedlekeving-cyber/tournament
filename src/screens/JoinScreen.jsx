@@ -217,7 +217,7 @@ export default function JoinScreen() {
             onClick={() => window.location.href = '/tournament'}
             className="w-full mt-3 py-4 rounded-2xl font-bold text-lg text-white transition-all duration-300 transform hover:scale-[1.02] active:scale-95 shadow-xl bg-gradient-to-r from-yellow-600 via-amber-600 to-yellow-700 hover:from-yellow-500 hover:via-amber-500 hover:to-yellow-600"
           >
-            🏆 Knockout Tournament
+            🏆 Enter Quiz Arena
           </button>
 
           <div className="mt-6 rounded-2xl bg-gradient-to-r from-amber-500/10 to-yellow-500/10 border border-amber-500/20 p-4">

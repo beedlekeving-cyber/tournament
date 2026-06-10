@@ -96,7 +96,7 @@ export default function AdminDashboard() {
               <Zap className="w-4 h-4 text-white" />
             </div>
             <div>
-              <p className="text-white font-black text-sm leading-tight">QuizDuel</p>
+              <p className="text-white font-black text-sm leading-tight">Quiz Arena</p>
               <p className="text-indigo-400 text-xs font-medium">Admin Panel</p>
             </div>
           </div>
@@ -144,7 +144,7 @@ export default function AdminDashboard() {
               <div className="w-7 h-7 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center">
                 <Zap className="w-3.5 h-3.5 text-white" />
               </div>
-              <p className="text-white font-black text-sm">QuizDuel Admin</p>
+              <p className="text-white font-black text-sm">Quiz Arena Admin</p>
             </div>
             <h1 className="hidden md:block text-white font-black text-lg capitalize">{tab}</h1>
           </div>

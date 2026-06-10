@@ -594,6 +594,8 @@ export default function ViewScreen({ embedded = false }) {
   const [currentRound, setCurrentRound] = useState({ round: 0, roundLabel: 'Waiting…', matchCount: 0, playerCount: 0 });
   const [championBanner, setChampionBanner] = useState(null); // { username, rewardAmount }
   const [rewardAmount, setRewardAmount] = useState('');
+  const [edition, setEdition] = useState('Quiz Arena');
+  const [bannerIndex, setBannerIndex] = useState(0);
   const socketRef = useRef(null);
   const nextId = useRef(0);
   const TOURNEY_MAX_SECS = 45 * 60; // 45 minutes
@@ -611,6 +613,39 @@ export default function ViewScreen({ embedded = false }) {
     const t = setInterval(() => setTourneyElapsed(Math.floor((Date.now() - tourneyStart) / 1000)), 1000);
     return () => clearInterval(t);
   }, [tourneyStart]);
+
+  // Fetch the current edition once on mount (covers reloads when no live socket event has fired yet).
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${SOCKET_URL}/api/tournament/edition`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (!cancelled && d && d.edition) setEdition(d.edition); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  // Quiz Arena rotating announcement banner. Messages change every 6s.
+  // Phrasing chosen to be platform-safe (TikTok / Twitch / YouTube / Facebook Live):
+  // no gambling, betting, or wagering language — pure competition framing.
+  const announcementMessages = (() => {
+    const cap = currentRound.playerCount || 400;
+    const tag = (edition.split(':')[1] || '').trim() || 'Quiz Arena';
+    return [
+      `${cap} contestants enter ${edition}. Only one champion remains.`,
+      `Tonight, ${cap} players step into the Arena — who will become the champion?`,
+      `${tag} — live, skill-based, knowledge-driven. One contestant claims the crown.`,
+      `${cap} competitors. One champion. Welcome to ${edition}.`,
+      `Knowledge creates champions. Welcome to ${edition}.`,
+    ];
+  })();
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      setBannerIndex(i => (i + 1) % announcementMessages.length);
+    }, 6000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [edition, currentRound.playerCount]);
 
   const formatTourneyTime = (secs) => {
     const remaining = Math.max(0, TOURNEY_MAX_SECS - secs);
@@ -725,19 +760,22 @@ export default function ViewScreen({ embedded = false }) {
     sock.on('round_started', ({ round, roundLabel, matchCount, playerCount }) => {
       setCurrentRound({ round, roundLabel: roundLabel || `Round ${round}`, matchCount, playerCount });
     });
-    sock.on('tournament_started', ({ round, roundLabel, playerCount, rewardAmount: r }) => {
+    sock.on('tournament_started', ({ round, roundLabel, playerCount, rewardAmount: r, edition: e }) => {
       setCurrentRound({ round: round || 1, roundLabel: roundLabel || `Round ${round || 1}`, matchCount: 0, playerCount: playerCount || 0 });
       if (typeof r === 'string') setRewardAmount(r);
+      if (typeof e === 'string' && e) setEdition(e);
     });
     sock.on('tournament_next_round', ({ round, roundLabel, playerCount }) => {
       setCurrentRound({ round, roundLabel: roundLabel || `Round ${round}`, matchCount: 0, playerCount: playerCount || 0 });
     });
-    sock.on('tournament_champion', ({ username, rewardAmount: r }) => {
-      setChampionBanner({ username, rewardAmount: r || '' });
+    sock.on('tournament_champion', ({ username, rewardAmount: r, edition: e }) => {
+      setChampionBanner({ username, rewardAmount: r || '', edition: e });
       addActivity('champion', { username, rewardAmount: r });
+      if (typeof e === 'string' && e) setEdition(e);
     });
-    sock.on('tournament_config_updated', ({ rewardAmount: r }) => {
+    sock.on('tournament_config_updated', ({ rewardAmount: r, edition: e }) => {
       if (typeof r === 'string') setRewardAmount(r);
+      if (typeof e === 'string' && e) setEdition(e);
     });
 
     return () => sock.disconnect();
@@ -830,13 +868,42 @@ export default function ViewScreen({ embedded = false }) {
       {/* ── Main content ── */}
       <div className="relative z-10 flex flex-col h-full">
 
+        {/* ── Rotating Quiz Arena announcement banner (live-broadcast feel) ── */}
+        <div
+          className="px-6 py-2 text-center overflow-hidden"
+          style={{
+            background: 'linear-gradient(90deg, rgba(217,119,6,0.18), rgba(236,72,153,0.18), rgba(217,119,6,0.18))',
+            borderBottom: '1px solid rgba(251,191,36,0.25)',
+          }}
+        >
+          <p
+            key={bannerIndex}
+            className="text-amber-100 font-bold uppercase tracking-wider"
+            style={{
+              fontSize: 'clamp(0.85rem, 1.2vw, 1.1rem)',
+              animation: 'announce-fade 6s ease-in-out infinite',
+              textShadow: '0 0 18px rgba(251,191,36,0.55)',
+            }}
+          >
+            ⚡ {announcementMessages[bannerIndex]} ⚡
+          </p>
+          <style>{`
+            @keyframes announce-fade {
+              0%   { opacity: 0; transform: translateY(6px); }
+              8%   { opacity: 1; transform: translateY(0); }
+              92%  { opacity: 1; transform: translateY(0); }
+              100% { opacity: 0; transform: translateY(-6px); }
+            }
+          `}</style>
+        </div>
+
         {/* Header banner — BIG ROUND NAME */}
         <div className="px-6 pt-5 pb-4 text-center"
           style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
           <div className="flex items-center justify-center gap-4 mb-1">
             <Crown className="w-10 h-10 text-amber-400" style={{ filter: 'drop-shadow(0 0 14px #fbbf24)' }} />
             <div className="text-center">
-              <p className="text-amber-300 text-xs font-bold uppercase tracking-[0.35em] mb-1">Quiz Tournament — Live</p>
+              <p className="text-amber-300 text-xs font-bold uppercase tracking-[0.35em] mb-1">{edition} — Live</p>
               <p className="font-black uppercase tracking-tight"
                 style={{
                   fontSize: 'clamp(2.5rem, 6vw, 4.5rem)',

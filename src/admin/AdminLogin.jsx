@@ -23,7 +23,7 @@ export default function AdminLogin() {
             <Shield className="w-10 h-10 text-white" />
           </div>
           <h1 className="text-4xl font-black text-white">Admin Panel</h1>
-          <p className="text-gray-500 mt-1 text-sm">Quiz Duel Tournament</p>
+          <p className="text-gray-500 mt-1 text-sm">Quiz Arena</p>
         </div>
 
         {/* Login card */}

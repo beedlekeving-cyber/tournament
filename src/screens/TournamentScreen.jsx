@@ -440,7 +440,7 @@ function WinnerChatThread({ username }) {
 }
 
 // ─── Sub-component: Champion (winner-only) with reward + account form ───────
-function TournamentChampion({ username, rewardAmount }) {
+function TournamentChampion({ username, rewardAmount, edition, outlasted }) {
   const [accountNumber, setAccountNumber] = useState('');
   const [accountName, setAccountName] = useState('');
   const [bankName, setBankName] = useState('');
@@ -486,12 +486,20 @@ function TournamentChampion({ username, rewardAmount }) {
               <Crown className="w-14 h-14 text-white" />
             </div>
           </div>
-          <h2 className="text-5xl font-black mb-2"
+          <p className="text-amber-300 text-sm font-bold tracking-widest mb-2">👑 CHAMPION OF THE ARENA 👑</p>
+          <h2 className="text-4xl font-black mb-3"
             style={{ background: 'linear-gradient(135deg,#fbbf24,#fde68a,#f59e0b)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', backgroundClip:'text', filter:'drop-shadow(0 0 20px rgba(251,191,36,0.8))' }}>
-            CHAMPION!
+            Congratulations {username}
           </h2>
-          <p className="text-amber-200 text-xl font-bold mb-2">🏆 Congratulations, {username}!</p>
-          <p className="text-gray-300">You are the last player standing.</p>
+          <p className="text-amber-200 text-base font-semibold mb-1">
+            You have conquered <span className="text-white">{edition || 'Quiz Arena'}</span>
+          </p>
+          {typeof outlasted === 'number' && outlasted > 0 && (
+            <p className="text-gray-300 text-sm mb-1">
+              Outlasted <span className="text-amber-300 font-bold">{outlasted}</span> {outlasted === 1 ? 'competitor' : 'competitors'}
+            </p>
+          )}
+          <p className="text-gray-400 text-sm italic">Claim your place among the legends.</p>
         </div>
 
         {/* Reward card */}
@@ -579,7 +587,7 @@ function TournamentChampion({ username, rewardAmount }) {
 }
 
 // ─── Sub-component: Tournament ended (non-winners) ──────────────────────────
-function TournamentEnded({ championUsername, myUsername }) {
+function TournamentEnded({ championUsername, myUsername, edition }) {
   return (
     <div className="fixed inset-0 z-40 flex flex-col items-center justify-center p-4"
       style={{ background: 'linear-gradient(160deg, rgba(10,10,30,0.97) 0%, rgba(20,20,50,0.97) 100%)' }}>
@@ -590,13 +598,14 @@ function TournamentEnded({ championUsername, myUsername }) {
             <Trophy className="w-12 h-12 text-white" />
           </div>
         </div>
-        <h2 className="text-3xl font-black mb-3 text-white">Tournament Complete!</h2>
-        <p className="text-indigo-200 text-lg font-bold mb-2">🏆 Champion: {championUsername}</p>
-        <p className="text-gray-400 mb-6">Thanks for playing!</p>
+        <p className="text-indigo-300 text-xs font-bold uppercase tracking-widest mb-2">{edition || 'Quiz Arena'}</p>
+        <h2 className="text-3xl font-black mb-3 text-white">Competition Complete</h2>
+        <p className="text-indigo-200 text-lg font-bold mb-2">👑 Champion: {championUsername}</p>
+        <p className="text-gray-400 mb-6">Thank you for competing!</p>
         <div className="rounded-2xl p-5"
           style={{ background: 'linear-gradient(135deg, rgba(99,102,241,0.15), rgba(139,92,246,0.15))', border: '1px solid rgba(99,102,241,0.4)' }}>
-          <p className="text-indigo-300 font-medium text-sm mb-1">Better luck next time, {myUsername}!</p>
-          <p className="text-gray-400 text-sm">Stay tuned for the next tournament.</p>
+          <p className="text-indigo-300 font-medium text-sm mb-1">A worthy contest, {myUsername}.</p>
+          <p className="text-gray-400 text-sm">The next edition of Quiz Arena is on its way.</p>
         </div>
       </div>
     </div>
@@ -790,10 +799,17 @@ export default function TournamentScreen() {
 
   // ─── Live tournament phases ───────────────────────────────────────────────
   if (tournament.phase === 'champion') {
-    return <TournamentChampion username={displayUsername} rewardAmount={championReward} />;
+    return (
+      <TournamentChampion
+        username={displayUsername}
+        rewardAmount={championReward}
+        edition={tournament.edition || state.tournament?.edition || 'Quiz Arena'}
+        outlasted={tournament.outlasted}
+      />
+    );
   }
   if (tournament.phase === 'tournament_ended') {
-    return <TournamentEnded championUsername={tournament.championUsername} myUsername={displayUsername} />;
+    return <TournamentEnded championUsername={tournament.championUsername} myUsername={displayUsername} edition={tournament.edition || state.tournament?.edition || 'Quiz Arena'} />;
   }
   if (tournament.phase === 'no_winner') {
     return <TournamentBlocked title="No Champion" message={tournament.noWinnerMessage || 'All players were eliminated this tournament.'} />;
@@ -866,13 +882,13 @@ export default function TournamentScreen() {
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full mb-3"
           style={{ background: 'rgba(251,191,36,0.15)', border: '1px solid rgba(251,191,36,0.3)' }}>
           <Trophy className="w-3.5 h-3.5 text-amber-400" />
-          <span className="text-amber-300 text-xs font-bold uppercase tracking-wider">Quiz Tournament</span>
+          <span className="text-amber-300 text-xs font-bold uppercase tracking-wider">{state.tournament?.edition || 'Quiz Arena'}</span>
         </div>
         <h1 className="text-4xl font-black mb-1"
           style={{ background: 'linear-gradient(135deg, #fbbf24, #f59e0b)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' }}>
-          Knockout Tournament
+          Quiz Arena
         </h1>
-        <p className="text-gray-400 text-sm">1v1 duels. Win every round to claim the prize.</p>
+        <p className="text-gray-400 text-sm">Knowledge creates champions. 1v1 elimination — last contestant wins.</p>
       </div>
 
       {/* Reward + cap card */}

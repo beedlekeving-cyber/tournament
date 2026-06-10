@@ -1,10 +1,19 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAdmin } from '../AdminContext';
-import { Play, RotateCcw, Users, Swords, Clock, RefreshCw, CalendarClock, Gift, Save, Database, HelpCircle } from 'lucide-react';
+import { Play, RotateCcw, Users, Swords, Clock, RefreshCw, CalendarClock, Gift, Save, Database, HelpCircle, Award } from 'lucide-react';
 import {
   BASE_URL as API, adminAuthHeaders,
   setTournamentReward, refreshQuestionBankFromDB, fetchTournamentStatus,
 } from '../../utils/api';
+
+const ARENA_EDITIONS = [
+  'Quiz Arena: General Knowledge Edition',
+  'Quiz Arena: Football Edition',
+  'Quiz Arena: World Cup Edition',
+  'Quiz Arena: Movie Quiz Edition',
+  'Quiz Arena: Tech Quiz Edition',
+  'Quiz Arena: Music Edition',
+];
 
 export default function TournamentTab() {
   const { dispatch } = useAdmin();
@@ -16,6 +25,7 @@ export default function TournamentTab() {
     activeCount: 0,
     maxPlayers: 400,
     rewardAmount: '',
+    edition: ARENA_EDITIONS[0],
     questionBankSize: 0,
     players: [],
   });
@@ -24,6 +34,7 @@ export default function TournamentTab() {
   const [dateInput, setDateInput] = useState('');
   const [timeInput, setTimeInput] = useState('12:00');
   const [rewardInput, setRewardInput] = useState('');
+  const [savingEdition, setSavingEdition] = useState(false);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -36,6 +47,7 @@ export default function TournamentTab() {
         activeCount: data.activeCount ?? 0,
         maxPlayers: data.maxPlayers ?? 400,
         rewardAmount: data.rewardAmount ?? '',
+        edition: data.edition || ARENA_EDITIONS[0],
         questionBankSize: data.questionBankSize ?? 0,
         players: data.players || [],
       });
@@ -118,6 +130,26 @@ export default function TournamentTab() {
       dispatch({ type: 'SHOW_TOAST', payload: { type: 'error', msg: e.message } });
     }
     setLoading(false);
+  };
+
+  const saveEdition = async (edition) => {
+    setSavingEdition(true);
+    try {
+      const res = await fetch(`${API}/admin/tournament/edition`, {
+        method: 'POST',
+        headers: adminAuthHeaders(),
+        body: JSON.stringify({ edition }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Server error: ${res.status}`);
+      }
+      dispatch({ type: 'SHOW_TOAST', payload: { type: 'success', msg: `Edition set to ${edition}` } });
+      await fetchStatus();
+    } catch (e) {
+      dispatch({ type: 'SHOW_TOAST', payload: { type: 'error', msg: e.message } });
+    }
+    setSavingEdition(false);
   };
 
   const reloadQuestions = async () => {
@@ -221,6 +253,27 @@ export default function TournamentTab() {
             ? '🚀 At capacity — tournament auto-starts now.'
             : `Auto-starts when ${status.maxPlayers} have registered.`}
         </p>
+      </div>
+
+      {/* Edition selector */}
+      <div className="glass rounded-2xl p-5 mb-6">
+        <h3 className="text-white font-bold flex items-center gap-2 mb-3">
+          <Award className="w-4 h-4 text-amber-400" /> Quiz Arena Edition
+        </h3>
+        <p className="text-gray-500 text-xs mb-3">
+          Pick the edition for the current tournament. Shown everywhere players see — registration, champion screen, ViewScreen banner.
+        </p>
+        <select
+          value={status.edition || ARENA_EDITIONS[0]}
+          disabled={savingEdition || loading}
+          onChange={(e) => saveEdition(e.target.value)}
+          className="w-full bg-white/5 border border-white/10 focus:border-amber-500 rounded-xl px-3 py-2.5 text-white outline-none"
+        >
+          {ARENA_EDITIONS.map(e => (
+            <option key={e} value={e} className="bg-[#0a0518] text-white">{e}</option>
+          ))}
+        </select>
+        <p className="text-amber-300 text-xs mt-2">Active: <span className="font-bold">{status.edition || ARENA_EDITIONS[0]}</span></p>
       </div>
 
       {/* Reward + question bank */}
