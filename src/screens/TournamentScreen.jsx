@@ -882,7 +882,15 @@ export default function TournamentScreen() {
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full mb-3"
           style={{ background: 'rgba(251,191,36,0.15)', border: '1px solid rgba(251,191,36,0.3)' }}>
           <Trophy className="w-3.5 h-3.5 text-amber-400" />
-          <span className="text-amber-300 text-xs font-bold uppercase tracking-wider">{state.tournament?.edition || 'Quiz Arena'}</span>
+          <span className="text-amber-300 text-xs font-bold uppercase tracking-wider">
+            {(() => {
+              const ed = state.tournament?.edition;
+              if (!ed) return 'Quiz Arena';
+              // "Quiz Arena: Football Edition" → "Football Edition"
+              const parts = ed.split(':');
+              return (parts[1] || ed).trim();
+            })()}
+          </span>
         </div>
         <h1 className="text-4xl font-black mb-1"
           style={{ background: 'linear-gradient(135deg, #fbbf24, #f59e0b)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' }}>
