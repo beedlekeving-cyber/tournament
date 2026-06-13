@@ -848,14 +848,16 @@ export default function ViewScreen({ embedded = false }) {
             }}>
             <div className="flex items-center justify-center gap-3 mb-2">
               <Crown className="w-10 h-10 text-white" />
-              <p className="text-white font-black text-2xl uppercase tracking-widest">CHAMPION!</p>
+              <p className="text-white font-black text-2xl uppercase tracking-widest">
+                CHAMPION!{championBanner.rewardAmount ? ` ${championBanner.rewardAmount} pts` : ''}
+              </p>
               <Crown className="w-10 h-10 text-white" />
             </div>
             <p className="text-white font-black text-5xl mb-1" style={{ textShadow: '0 0 24px rgba(0,0,0,0.4)' }}>
               {championBanner.username}
             </p>
             {championBanner.rewardAmount && (
-              <p className="text-amber-50 font-bold text-lg">🏆 {championBanner.rewardAmount}</p>
+              <p className="text-amber-50 font-bold text-lg">🏆 {championBanner.rewardAmount} pts</p>
             )}
           </div>
         </div>
@@ -890,7 +892,7 @@ export default function ViewScreen({ embedded = false }) {
           {rewardAmount && (
             <p className="mt-2 inline-block px-3 py-1 rounded-full text-amber-200 font-bold text-sm"
               style={{ background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.4)' }}>
-              💰 Grand Prize: {rewardAmount}
+              🎯 Top Score: {rewardAmount} pts
             </p>
           )}
 
