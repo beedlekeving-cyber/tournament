@@ -883,6 +883,13 @@ export function GameProvider({ children }) {
       console.log('[TOURNAMENT] final_notice:', { message, round });
       dispatch({ type: ACTIONS.TOURNAMENT_FINAL_NOTICE, payload: { message } });
     });
+    // Server-driven transition: server emits this at the exact moment the
+    // first question should appear. This is the authoritative signal — much
+    // more reliable than any client-side setTimeout for long (3-min) waits.
+    socket.on('match_start_now', ({ matchId }) => {
+      console.log('[TOURNAMENT] match_start_now:', { matchId });
+      dispatch({ type: 'TOURNAMENT_MATCH_START' });
+    });
     socket.on('tournament_champion',    onTournamentChampion);
     socket.on('you_are_champion',       onYouAreChampion);
     socket.on('next_question',          onNextQuestion);
