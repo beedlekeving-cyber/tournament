@@ -200,10 +200,11 @@ function MatchCard({ match, index }) {
       </div>
 
       {/* Players row */}
-      <div className="flex items-stretch gap-0 px-3 pb-3">
+      <div className="flex items-stretch gap-2 px-3 pb-3">
 
-        {/* Player 1 */}
-        <div className="flex-1 flex flex-col items-center gap-1.5">
+        {/* Player 1 — flex-1 min-w-0 so long names can never push P2 off-screen */}
+        <div className="flex-1 min-w-0 flex flex-col items-center gap-1.5"
+          style={{ flexBasis: 0 }}>
           {/* Avatar with glow ring */}
           <div className="relative">
             <div
@@ -269,8 +270,9 @@ function MatchCard({ match, index }) {
           </div>
         </div>
 
-        {/* Player 2 */}
-        <div className="flex-1 flex flex-col items-center gap-1.5">
+        {/* Player 2 — same flex sizing as P1 so both get exactly half the space */}
+        <div className="flex-1 min-w-0 flex flex-col items-center gap-1.5"
+          style={{ flexBasis: 0 }}>
           <div className="relative">
             <div
               className="w-12 h-12 rounded-xl flex items-center justify-center font-black text-xl text-white"
@@ -1130,7 +1132,16 @@ export default function ViewScreen({ embedded = false }) {
                 )}
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-3">
+              <div
+                className="grid gap-3"
+                style={{
+                  // Auto-fit columns that are at least 280px wide.
+                  // On a narrow ACTIVE BATTLES column this collapses to 1
+                  // column so both players fit fully in every card. On a
+                  // very wide TV it expands to 2, 3, or more columns.
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                }}
+              >
                 {matches.map((match, i) => (
                   <MatchCard key={match.matchId} match={match} index={i} />
                 ))}
