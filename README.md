@@ -1,17 +1,53 @@
-# React + Vite
+# Quiz Arena — Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React 19 + Vite 7 + Tailwind 4 + Socket.io client. Deployed to Vercel.
 
-Currently, two official plugins are available:
+See the [project root README](../README.md) for architecture, deployment
+flow, and the PWA / install-app details.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Scripts
 
-## React Compiler
+```bash
+npm install
+npm run dev        # http://localhost:5173
+npm run build      # production build to ./dist
+npm run preview    # preview the built app
+npm run lint
+```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Local dev talking to local backend
 
-## Expanding the ESLint configuration
+The `BASE_URL` in [`src/utils/api.js`](./src/utils/api.js) auto-detects
+`localhost` and points to `http://localhost:4000`. Anywhere else, it hits
+the deployed backend `https://quizbackend-uevc-hvrc.onrender.com`.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
-# quiz-tournament
+To override at build/preview time:
+
+```bash
+VITE_SERVER_URL=https://my-other-backend.example.com npm run build
+```
+
+## PWA notes
+
+The app is a Progressive Web App via
+[`vite-plugin-pwa`](https://vite-pwa-org.netlify.app/) — configured in
+[`vite.config.js`](./vite.config.js). Users can install it from their
+browser and launch it from the phone home screen.
+
+The install prompt UI lives in
+[`src/components/InstallPWA.jsx`](./src/components/InstallPWA.jsx) — it
+shows on Android/Chrome/Edge when the browser is ready to install, and
+shows a manual "Share → Add to Home Screen" hint on iOS Safari.
+
+Icons live in `public/`. Currently only `icon.svg` is committed —
+drop `apple-touch-icon.png` (180×180), `icon-192.png`, `icon-512.png`, and
+`icon-512-maskable.png` next to it for pixel-perfect rendering on every
+platform. Without them the SVG is used as a fallback.
+
+## Routes
+
+| Path | Screen |
+|---|---|
+| `/` | Player registration → live match → champion screen |
+| `/admin` | Admin dashboard (login required) |
+| `/view` | Big-screen spectator / livestream broadcast view |
