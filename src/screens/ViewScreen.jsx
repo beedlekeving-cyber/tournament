@@ -598,9 +598,12 @@ export default function ViewScreen({ embedded = false }) {
   const [championBanner, setChampionBanner] = useState(null); // { username, rewardAmount }
   const [rewardAmount, setRewardAmount] = useState('');
   const [edition, setEdition] = useState('Quiz Arena');
+  const [scheduledDate, setScheduledDate] = useState(null); // ISO string of scheduled start
+  const [tournamentStarted, setTournamentStarted] = useState(false);
   const socketRef = useRef(null);
   const nextId = useRef(0);
-  const TOURNEY_MAX_SECS = 45 * 60; // 45 minutes
+  const battlesScrollRef = useRef(null); // for auto-scrolling ACTIVE BATTLES on big screens
+  const TOURNEY_MAX_SECS = 45 * 60; // 45 minutes (post-start elapsed cap)
 
   // Add activity entry with timestamp
   const addActivity = useCallback((type, data) => {
@@ -616,14 +619,28 @@ export default function ViewScreen({ embedded = false }) {
     return () => clearInterval(t);
   }, [tourneyStart]);
 
-  // Fetch the current edition once on mount (covers reloads when no live socket event has fired yet).
+  // Fetch the current edition + tournament status once on mount, then poll
+  // every 5 seconds so the countdown catches admin changes without a reload.
   useEffect(() => {
     let cancelled = false;
-    fetch(`${SOCKET_URL}/api/tournament/edition`)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (!cancelled && d && d.edition) setEdition(d.edition); })
-      .catch(() => {});
-    return () => { cancelled = true; };
+    const fetchStatus = () => {
+      fetch(`${SOCKET_URL}/tournament/status`)
+        .then(r => r.ok ? r.json() : null)
+        .then(d => {
+          if (cancelled || !d) return;
+          if (d.edition) setEdition(d.edition);
+          if (typeof d.scheduledDate === 'string' || d.scheduledDate === null) {
+            setScheduledDate(d.scheduledDate);
+          }
+          if (typeof d.tournamentStarted === 'boolean') {
+            setTournamentStarted(d.tournamentStarted);
+          }
+        })
+        .catch(() => {});
+    };
+    fetchStatus();
+    const t = setInterval(fetchStatus, 5000);
+    return () => { cancelled = true; clearInterval(t); };
   }, []);
 
   // Quiz Arena rotating announcement banner. Messages change every 6s.
@@ -643,10 +660,79 @@ export default function ViewScreen({ embedded = false }) {
 
   // LiveTicker manages its own rotation internally — nothing to do here.
 
+  // Auto-scroll the ACTIVE BATTLES column on big screens (TV / stream displays).
+  // Fires only when the content is taller than the visible area — otherwise
+  // it stays put. Smoothly scrolls to the bottom over ~30s, pauses, then jumps
+  // back to the top and does it again. Any manual wheel/touch pauses it for
+  // 15s so an operator can still inspect a specific match.
+  useEffect(() => {
+    const el = battlesScrollRef.current;
+    if (!el) return;
+
+    const SCROLL_STEP_PX = 1;      // per tick
+    const TICK_MS = 40;            // ~25 ticks/sec → ~25 px/sec
+    const PAUSE_AT_ENDS_MS = 4000; // pause at top / bottom before reversing
+    const MANUAL_PAUSE_MS = 15000; // pause after operator touches the scrollbar
+
+    let direction = 1;             // 1 = down, -1 = up
+    let pausedUntil = 0;
+    let atEndSince = 0;
+
+    const onManualScroll = () => { pausedUntil = Date.now() + MANUAL_PAUSE_MS; };
+    el.addEventListener('wheel', onManualScroll, { passive: true });
+    el.addEventListener('touchstart', onManualScroll, { passive: true });
+
+    const tick = setInterval(() => {
+      if (!battlesScrollRef.current) return;
+      const node = battlesScrollRef.current;
+      if (Date.now() < pausedUntil) return;
+      // Only auto-scroll if there's actually overflow (i.e., content taller than viewport)
+      const overflow = node.scrollHeight - node.clientHeight;
+      if (overflow <= 4) return;
+
+      const atBottom = node.scrollTop >= overflow - 1;
+      const atTop = node.scrollTop <= 0;
+      if ((direction === 1 && atBottom) || (direction === -1 && atTop)) {
+        if (!atEndSince) atEndSince = Date.now();
+        if (Date.now() - atEndSince > PAUSE_AT_ENDS_MS) {
+          direction *= -1;
+          atEndSince = 0;
+        }
+        return;
+      }
+      atEndSince = 0;
+      node.scrollTop += SCROLL_STEP_PX * direction;
+    }, TICK_MS);
+
+    return () => {
+      clearInterval(tick);
+      el.removeEventListener('wheel', onManualScroll);
+      el.removeEventListener('touchstart', onManualScroll);
+    };
+  }, [matches.length]);
+
+  // Countdown to the admin-scheduled start (before the game begins), then
+  // switches to elapsed session time once the tournament has started.
+  const msUntilStart = scheduledDate ? new Date(scheduledDate).getTime() - Date.now() : 0;
+  const secsUntilStart = Math.max(0, Math.floor(msUntilStart / 1000));
+  const isCountingDown = !tournamentStarted && !!scheduledDate && msUntilStart > 0;
+
   const formatTourneyTime = (secs) => {
+    // Post-start: show elapsed within a 45-min cap
     const remaining = Math.max(0, TOURNEY_MAX_SECS - secs);
     const m = Math.floor(remaining / 60);
     const s = remaining % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
+  const formatCountdown = (secs) => {
+    if (secs >= 3600) {
+      const h = Math.floor(secs / 3600);
+      const m = Math.floor((secs % 3600) / 60);
+      const s = secs % 60;
+      return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    }
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   };
   const tourneyPct = Math.min(100, (tourneyElapsed / TOURNEY_MAX_SECS) * 100);
@@ -711,9 +797,10 @@ export default function ViewScreen({ embedded = false }) {
 
     sock.on('match_ended', ({ matchId, winner, loser }) => {
       setMatches(prev => prev.filter(m => m.matchId !== matchId));
+      // Eviction counting is handled ONLY by `player_eliminated` — incrementing
+      // here too would double-count every regular match (which fires both events).
+      // Local visual effects only.
       if (loser) {
-        addElim(loser);
-        setTotalEvictions(n => n + 1);
         addActivity('eviction', { username: loser, winner });
         setHype(true);
         setTimeout(() => setHype(false), 1000);
@@ -758,6 +845,7 @@ export default function ViewScreen({ embedded = false }) {
     });
     sock.on('tournament_started', ({ round, roundLabel, playerCount, rewardAmount: r, edition: e }) => {
       setCurrentRound({ round: round || 1, roundLabel: roundLabel || `Round ${round || 1}`, matchCount: 0, playerCount: playerCount || 0 });
+      setTournamentStarted(true);
       if (typeof r === 'string') setRewardAmount(r);
       if (typeof e === 'string' && e) setEdition(e);
     });
@@ -920,15 +1008,23 @@ export default function ViewScreen({ embedded = false }) {
               <Activity className="w-3.5 h-3.5 text-red-400" />
               <span className="text-red-300 text-xs font-bold">{totalEvictions} evicted</span>
             </div>
-            {/* Tournament countdown */}
+            {/* Tournament clock — countdown to scheduled start, then elapsed */}
             <div className="flex items-center gap-1.5 px-3 py-1 rounded-full"
               style={{
-                background: tourneyExpired ? 'rgba(239,68,68,0.2)' : tourneyPct > 80 ? 'rgba(249,115,22,0.15)' : 'rgba(251,191,36,0.12)',
-                border: `1px solid ${tourneyExpired ? 'rgba(239,68,68,0.5)' : tourneyPct > 80 ? 'rgba(249,115,22,0.4)' : 'rgba(251,191,36,0.35)'}`,
+                background: isCountingDown
+                  ? 'rgba(99,102,241,0.15)'
+                  : (tourneyExpired ? 'rgba(239,68,68,0.2)' : tourneyPct > 80 ? 'rgba(249,115,22,0.15)' : 'rgba(251,191,36,0.12)'),
+                border: `1px solid ${isCountingDown
+                  ? 'rgba(99,102,241,0.4)'
+                  : (tourneyExpired ? 'rgba(239,68,68,0.5)' : tourneyPct > 80 ? 'rgba(249,115,22,0.4)' : 'rgba(251,191,36,0.35)')}`,
               }}>
-              <Timer className="w-3.5 h-3.5 text-amber-300" />
-              <span className={`text-xs font-black font-mono ${tourneyExpired ? 'text-red-400 animate-pulse' : tourneyPct > 80 ? 'text-orange-400' : 'text-amber-300'}`}>
-                {tourneyExpired ? '⏰ TIME UP' : formatTourneyTime(tourneyElapsed)}
+              <Timer className={`w-3.5 h-3.5 ${isCountingDown ? 'text-indigo-300' : 'text-amber-300'}`} />
+              <span className={`text-xs font-black font-mono ${isCountingDown
+                ? 'text-indigo-200'
+                : (tourneyExpired ? 'text-red-400 animate-pulse' : tourneyPct > 80 ? 'text-orange-400' : 'text-amber-300')}`}>
+                {isCountingDown
+                  ? `Starts in ${formatCountdown(secsUntilStart)}`
+                  : (tourneyExpired ? '⏰ TIME UP' : formatTourneyTime(tourneyElapsed))}
               </span>
             </div>
           </div>
@@ -958,8 +1054,8 @@ export default function ViewScreen({ embedded = false }) {
             <LeaderboardPanel players={players} />
           </div>
 
-          {/* Middle: Match grid (scrollable) */}
-          <div className="flex-1 overflow-y-auto min-w-0 pr-2" style={{ maxHeight: 'calc(100vh - 260px)' }}>
+          {/* Middle: Match grid (scrollable + auto-scrolls on big screens/TVs) */}
+          <div ref={battlesScrollRef} className="flex-1 overflow-y-auto min-w-0 pr-2" style={{ maxHeight: 'calc(100vh - 260px)' }}>
             <div className="flex items-center justify-between mb-4 sticky top-0 z-10 pb-2" style={{ background: 'linear-gradient(to bottom, rgba(5,0,20,0.95) 60%, transparent)' }}>
               <div className="flex items-center gap-2">
                 <Zap className="w-5 h-5 text-amber-400" style={{ filter: 'drop-shadow(0 0 6px #fbbf24)', animation: 'pulse 1s ease-in-out infinite' }} />
