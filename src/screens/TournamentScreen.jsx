@@ -27,19 +27,7 @@ function TournamentMatch({
 
   const q = questions[currentQuestionIndex];
 
-  // Safety: never auto-submit (and never crash on `q.question`) when the
-  // question hasn't arrived yet. Better to wait visually than be auto-eliminated.
-  if (!q) {
-    return (
-      <div className="fixed inset-0 z-40 flex flex-col items-center justify-center p-4"
-        style={{ background: 'linear-gradient(160deg, rgba(10,5,30,0.97), rgba(30,5,60,0.97))' }}>
-        <div className="text-center">
-          <p className="text-amber-300 text-lg font-bold">Loading question…</p>
-        </div>
-      </div>
-    );
-  }
-
+  // Reset per-question state whenever the question changes.
   useEffect(() => {
     setSelected(null);
     setShowResult(false);
@@ -56,14 +44,18 @@ function TournamentMatch({
     }
   }, [bothCorrectFeedback, currentQuestionIndex]);
 
+  // Per-question countdown. Guard on `q` so we don't tick while the question
+  // is still loading — otherwise the timer could hit 0 and auto-submit blank
+  // (which the 2-strike rule would then interpret as "player timed out").
   useEffect(() => {
+    if (!q) return;
     if (showResult) return;
     if (timer <= 0) { handleAnswer(null); return; }
     if (timer <= 3) playUrgentTick(); else playTick();
     const t = setTimeout(() => setTimer(t => t - 1), 1000);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timer, showResult]);
+  }, [timer, showResult, q]);
 
   useEffect(() => {
     const handler = () => setOpponentAnswered(true);
@@ -114,7 +106,20 @@ function TournamentMatch({
     onAnswered(optionKey, q?.id, matchId, timer);
   };
 
-  if (!q) return null;
+  // Question not loaded yet — render a lightweight loading state. Rendered
+  // AFTER all hooks have been called this render so React's rules of hooks
+  // hold (calling different numbers of hooks between renders is what makes
+  // clicks silently hang).
+  if (!q) {
+    return (
+      <div className="fixed inset-0 z-40 flex flex-col items-center justify-center p-4"
+        style={{ background: 'linear-gradient(160deg, rgba(10,5,30,0.97), rgba(30,5,60,0.97))' }}>
+        <div className="text-center">
+          <p className="text-amber-300 text-lg font-bold">Loading question…</p>
+        </div>
+      </div>
+    );
+  }
 
   const options = q.options
     ? (typeof q.options === 'object' && !Array.isArray(q.options)
