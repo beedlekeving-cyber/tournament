@@ -848,13 +848,58 @@ export default function TournamentScreen() {
     );
   }
   if (tournament.phase === 'pre_match') {
+    const secs = Math.max(0, Number(tournament.preMatchCountdown) || 0);
+    const mm = Math.floor(secs / 60);
+    const ss = secs % 60;
+    const timeStr = mm > 0 ? `${mm}:${String(ss).padStart(2, '0')}` : `${ss}`;
+    const oppName = tournament.opponent?.username || 'Opponent';
     return (
-      <div className="fixed inset-0 z-40 flex flex-col items-center justify-center p-4"
+      <div className="fixed inset-0 z-40 flex flex-col items-center justify-center p-6 overflow-y-auto"
         style={{ background: 'linear-gradient(160deg, rgba(10,5,30,0.97), rgba(30,5,60,0.97))' }}>
-        <p className="text-amber-300 text-xs uppercase tracking-widest mb-1">{tournament.roundLabel}</p>
-        <h2 className="text-3xl font-black text-white mb-3">vs {tournament.opponent?.username}</h2>
-        <div className="text-7xl font-black text-amber-400 animate-pulse">{tournament.preMatchCountdown}</div>
-        <p className="text-gray-400 mt-3">Match starting…</p>
+        <p className="text-amber-300 text-xs uppercase tracking-widest mb-4">{tournament.roundLabel}</p>
+
+        {/* Both players' names side-by-side with a big VS between them */}
+        <div className="w-full max-w-md flex items-stretch gap-3 mb-6">
+          {/* You */}
+          <div className="flex-1 rounded-2xl p-4 text-center"
+            style={{ background: 'linear-gradient(135deg, rgba(59,130,246,0.28), rgba(59,130,246,0.12))', border: '2px solid rgba(59,130,246,0.6)', boxShadow: '0 0 24px rgba(59,130,246,0.25)' }}>
+            <p className="text-blue-300 text-xs uppercase tracking-wider mb-2">You</p>
+            <div className="w-14 h-14 mx-auto mb-2 rounded-2xl flex items-center justify-center font-black text-2xl text-white"
+              style={{ background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)' }}>
+              {(displayUsername?.[0] || '?').toUpperCase()}
+            </div>
+            <p className="text-white font-black text-base break-words leading-tight">{displayUsername}</p>
+          </div>
+
+          {/* VS badge */}
+          <div className="flex flex-col items-center justify-center shrink-0 px-1">
+            <p className="text-amber-400 font-black text-3xl"
+              style={{ textShadow: '0 0 18px rgba(251,191,36,0.7)', animation: 'pulse 1.2s ease-in-out infinite' }}>
+              VS
+            </p>
+          </div>
+
+          {/* Opponent */}
+          <div className="flex-1 rounded-2xl p-4 text-center"
+            style={{ background: 'linear-gradient(135deg, rgba(239,68,68,0.28), rgba(239,68,68,0.12))', border: '2px solid rgba(239,68,68,0.6)', boxShadow: '0 0 24px rgba(239,68,68,0.25)' }}>
+            <p className="text-red-300 text-xs uppercase tracking-wider mb-2">Opponent</p>
+            <div className="w-14 h-14 mx-auto mb-2 rounded-2xl flex items-center justify-center font-black text-2xl text-white"
+              style={{ background: 'linear-gradient(135deg, #ef4444, #b91c1c)' }}>
+              {(oppName?.[0] || '?').toUpperCase()}
+            </div>
+            <p className="text-white font-black text-base break-words leading-tight">{oppName}</p>
+          </div>
+        </div>
+
+        {/* Countdown to first question — synced to server startAt */}
+        <p className="text-gray-400 text-sm uppercase tracking-widest mb-1">Match starts in</p>
+        <div className="font-black text-amber-400 animate-pulse font-mono"
+          style={{ fontSize: 'clamp(3rem, 10vw, 5.5rem)', textShadow: '0 0 24px rgba(251,191,36,0.6)' }}>
+          {timeStr}
+        </div>
+        <p className="text-gray-500 text-xs mt-3 text-center max-w-xs">
+          {secs > 15 ? 'Study your opponent. First question fires at the scheduled time.' : 'Get ready — the first question is about to appear.'}
+        </p>
       </div>
     );
   }

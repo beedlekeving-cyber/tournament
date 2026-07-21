@@ -224,7 +224,9 @@ function MatchCard({ match, index }) {
               </div>
             )}
           </div>
-          <p className="text-white font-bold text-xs truncate max-w-full px-1 text-center">{p1.username}</p>
+          <p className="text-white font-black text-sm break-words w-full px-1 text-center leading-tight" style={{ minHeight: '2.5em' }}>
+            {p1.username || '—'}
+          </p>
           <p className="text-xs font-semibold" style={{ color: p1Answered ? '#4ade80' : '#fbbf24', textShadow: p1Answered ? '0 0 6px #22c55e' : '0 0 6px #fbbf24', animation: p1Answered ? 'none' : 'pulse 1s ease-in-out infinite', fontSize: '9px', letterSpacing: '0.08em' }}>
             {p1Answered ? 'DONE' : '~ ANSWERING...'}
           </p>
@@ -288,7 +290,9 @@ function MatchCard({ match, index }) {
               </div>
             )}
           </div>
-          <p className="text-white font-bold text-xs truncate max-w-full px-1 text-center">{p2.username}</p>
+          <p className="text-white font-black text-sm break-words w-full px-1 text-center leading-tight" style={{ minHeight: '2.5em' }}>
+            {p2.username || '—'}
+          </p>
           <p className="text-xs font-semibold" style={{ color: p2Answered ? '#4ade80' : '#fbbf24', textShadow: p2Answered ? '0 0 6px #22c55e' : '0 0 6px #fbbf24', animation: p2Answered ? 'none' : 'pulse 1s ease-in-out infinite', fontSize: '9px', letterSpacing: '0.08em' }}>
             {p2Answered ? 'DONE' : '~ ANSWERING...'}
           </p>

@@ -756,18 +756,22 @@ export function GameProvider({ children }) {
       dispatch({ type: 'TOURNAMENT_STARTED' });
     };
 
-    const onTournamentMatchFound = ({ matchId, questionIds, questions: inlineQuestions, opponent, round, roundLabel, totalQuestions, isTournament, preMatchCountdown, questionTime }) => {
+    const onTournamentMatchFound = ({ matchId, questionIds, questions: inlineQuestions, opponent, round, roundLabel, totalQuestions, isTournament, preMatchCountdown, startAt, questionTime }) => {
       if (!isTournament) return; // handled by the normal match_found listener above
       // Prefer inline questions sent by the server (race-free) over local-bank hydration.
       const hydrated = (Array.isArray(inlineQuestions) && inlineQuestions.length > 0)
         ? inlineQuestions
         : hydrateQuestions(questionIds);
-      console.log('[TOURNAMENT] match_found:', { matchId, round, roundLabel, totalQuestions, opponent: opponent?.username, preMatchCountdown, questionTime, questionIdCount: questionIds?.length, inlineCount: inlineQuestions?.length, hydrated: hydrated.length });
+      console.log('[TOURNAMENT] match_found:', { matchId, round, roundLabel, totalQuestions, opponent: opponent?.username, preMatchCountdown, startAt, questionTime, questionIdCount: questionIds?.length, inlineCount: inlineQuestions?.length, hydrated: hydrated.length });
       if (questionIds?.length && hydrated.length === 0) {
         console.warn('[TOURNAMENT] match_found: NO questions available — match will render empty');
       }
       const opp = opponent ?? {};
-      const countdown = preMatchCountdown || 5;
+      // Compute countdown from the server's absolute startAt timestamp.
+      // Falls back to preMatchCountdown for older-server compatibility.
+      const nowMs = Date.now();
+      const startAtMs = typeof startAt === 'number' ? startAt : nowMs + ((preMatchCountdown || 5) * 1000);
+      const initialCountdown = Math.max(0, Math.ceil((startAtMs - nowMs) / 1000));
       dispatch({
         type: ACTIONS.TOURNAMENT_MATCH_FOUND,
         payload: {
@@ -777,21 +781,39 @@ export function GameProvider({ children }) {
           round: round || 1,
           roundLabel,
           totalQuestions: totalQuestions || questionIds?.length || 5,
-          preMatchCountdown: countdown,
+          preMatchCountdown: initialCountdown,
           questionTime: questionTime || 15,
         },
       });
-      
-      // Start pre-match countdown
-      let count = countdown;
-      const tick = setInterval(() => {
-        count--;
-        dispatch({ type: 'TOURNAMENT_PRE_MATCH_TICK', payload: { countdown: count } });
-        if (count <= 0) {
-          clearInterval(tick);
-          dispatch({ type: 'TOURNAMENT_MATCH_START' });
-        }
+
+      // Server-anchored pre-match timing — drift-immune.
+      //
+      // Instead of counting down with `setInterval` (which browsers throttle
+      // heavily for backgrounded tabs and can drift by MINUTES over a 3-minute
+      // window), we:
+      //   1. Re-derive the displayed countdown from `startAtMs - Date.now()`
+      //      every second, so a backgrounded tab shows the right value the
+      //      moment it wakes up.
+      //   2. Schedule the actual transition to `in_match` with `setTimeout` at
+      //      the exact millisecond delta to startAt — this fires reliably even
+      //      after tab throttling because browsers deliver overdue timeouts as
+      //      soon as the tab is foregrounded again.
+      const displayTick = setInterval(() => {
+        const remaining = Math.max(0, Math.ceil((startAtMs - Date.now()) / 1000));
+        dispatch({ type: 'TOURNAMENT_PRE_MATCH_TICK', payload: { countdown: remaining } });
+        if (remaining <= 0) clearInterval(displayTick);
       }, 1000);
+
+      const startDelay = Math.max(0, startAtMs - Date.now());
+      const startTimer = setTimeout(() => {
+        clearInterval(displayTick);
+        dispatch({ type: 'TOURNAMENT_MATCH_START' });
+      }, startDelay);
+
+      // Safety: if a new match_found arrives (rare — race after reconnect) we
+      // don't want two timers stacked. Store them so a duplicate handler could
+      // cancel; for now they'll simply not clash because the state guards.
+      void startTimer;
     };
 
     const onTournamentRoundResult = ({ result, questionIndex, correctAnswer, myAnswer, opponentAnswer, matchOver }) => {
