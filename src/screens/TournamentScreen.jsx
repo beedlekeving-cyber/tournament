@@ -17,13 +17,21 @@ import {
 function TournamentMatch({
   questions, currentQuestionIndex, totalQuestions, opponent, round, roundLabel,
   matchId, bothCorrectFeedback, onAnswered, questionTime,
+  myAnswerStatus, onRetryAnswer,
 }) {
   const [selected, setSelected] = useState(null);
   const [showResult, setShowResult] = useState(false);
   const [correctAnswer, setCorrectAnswer] = useState(null);
-  const [timer, setTimer] = useState(questionTime ? questionTime - 1 : 14);
+  // Server-authoritative countdown. The client NEVER drives its own countdown
+  // for gameplay — the server emits timer_tick at 4Hz and this state mirrors
+  // it. That way both players see the exact same number, and auto-timeouts
+  // fire on the server clock (via startMatchTimer), not on drift-prone client
+  // setInterval loops.
+  const [timerMs, setTimerMs] = useState((questionTime || 7) * 1000);
+  const timer = Math.max(0, Math.ceil(timerMs / 1000));
   const [opponentAnswered, setOpponentAnswered] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState(null);
+  const lastTickAtRef = useRef(0); // last known server tick time (for local smoothing)
 
   const q = questions[currentQuestionIndex];
 
@@ -32,8 +40,9 @@ function TournamentMatch({
     setSelected(null);
     setShowResult(false);
     setCorrectAnswer(null);
-    setTimer(questionTime ? questionTime - 1 : 14);
+    setTimerMs((questionTime || 7) * 1000);
     setOpponentAnswered(false);
+    lastTickAtRef.current = 0;
   }, [currentQuestionIndex, questionTime]);
 
   useEffect(() => {
@@ -44,18 +53,44 @@ function TournamentMatch({
     }
   }, [bothCorrectFeedback, currentQuestionIndex]);
 
-  // Per-question countdown. Guard on `q` so we don't tick while the question
-  // is still loading — otherwise the timer could hit 0 and auto-submit blank
-  // (which the 2-strike rule would then interpret as "player timed out").
+  // Subscribe to the server's timer_tick — server broadcasts at 4Hz with an
+  // absolute deadline. We store deadlineMs and interpolate locally between
+  // ticks for smooth animation. Zero drift possible: every tick re-anchors
+  // the displayed number to the server clock.
   useEffect(() => {
     if (!q) return;
-    if (showResult) return;
-    if (timer <= 0) { handleAnswer(null); return; }
-    if (timer <= 3) playUrgentTick(); else playTick();
-    const t = setTimeout(() => setTimer(t => t - 1), 1000);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timer, showResult, q]);
+    let localFrame = null;
+    let localTimeoutId = null;
+
+    const applyTick = ({ questionIndex, remainingMs, deadlineMs }) => {
+      if (questionIndex !== undefined && questionIndex !== currentQuestionIndex) return;
+      lastTickAtRef.current = Date.now();
+      setTimerMs(Math.max(0, remainingMs));
+      // Play tick sounds locally on the whole-second boundary
+      const secs = Math.ceil(remainingMs / 1000);
+      if (secs > 0) { if (secs <= 3) playUrgentTick(); else playTick(); }
+      // Between ticks, interpolate downward every frame so the number
+      // decrements smoothly rather than jumping in 250ms steps.
+      if (deadlineMs) {
+        const step = () => {
+          const now = Date.now();
+          const remaining = Math.max(0, deadlineMs - now);
+          setTimerMs(remaining);
+          if (remaining <= 0) return;
+          localFrame = requestAnimationFrame(step);
+        };
+        if (localFrame) cancelAnimationFrame(localFrame);
+        localFrame = requestAnimationFrame(step);
+      }
+    };
+
+    socket.on('timer_tick', applyTick);
+    return () => {
+      socket.off('timer_tick', applyTick);
+      if (localFrame) cancelAnimationFrame(localFrame);
+      if (localTimeoutId) clearTimeout(localTimeoutId);
+    };
+  }, [currentQuestionIndex, q]);
 
   useEffect(() => {
     const handler = () => setOpponentAnswered(true);
@@ -187,6 +222,26 @@ function TournamentMatch({
           <h2 className="text-lg font-bold text-white leading-relaxed">{q.question}</h2>
         </div>
 
+        {/* Optimistic-submit status. `pending` shows a subtle "sending…" pill
+            so the user knows the tap registered; `failed` shows a retry chip
+            so a network glitch never looks like a dead button. */}
+        {selected && !showResult && myAnswerStatus === 'pending' && (
+          <div className="mb-2 flex items-center justify-center gap-2 text-amber-300 text-xs font-bold">
+            <Loader2 className="w-3 h-3 animate-spin" />
+            <span>Sending your answer…</span>
+          </div>
+        )}
+        {selected && !showResult && myAnswerStatus === 'failed' && (
+          <button
+            onClick={() => onRetryAnswer && onRetryAnswer(selected, q?.id, matchId, timer)}
+            className="mb-2 w-full flex items-center justify-center gap-2 py-2 rounded-xl border font-bold text-sm"
+            style={{ background: 'rgba(239,68,68,0.12)', borderColor: 'rgba(239,68,68,0.6)', color: '#fca5a5' }}
+          >
+            <XCircle className="w-4 h-4" />
+            <span>Didn't send — tap to retry</span>
+          </button>
+        )}
+
         <div className="space-y-3">
           {options.map(([key, text]) => {
             let style = { background: 'rgba(255,255,255,0.07)', border: '2px solid transparent' };
@@ -194,12 +249,21 @@ function TournamentMatch({
               if (key === correctKey) style = { background: 'rgba(34,197,94,0.2)', border: '2px solid #22c55e' };
               else if (key === selected) style = { background: 'rgba(239,68,68,0.2)', border: '2px solid #ef4444' };
             } else if (key === selected) {
-              style = { background: 'rgba(251,191,36,0.2)', border: '2px solid #fbbf24' };
+              // Highlight the selected option; visual tint reflects submit status.
+              if (myAnswerStatus === 'failed') {
+                style = { background: 'rgba(239,68,68,0.15)', border: '2px solid rgba(239,68,68,0.6)' };
+              } else {
+                style = { background: 'rgba(251,191,36,0.2)', border: '2px solid #fbbf24' };
+              }
             }
+            // Disable buttons ONLY once accepted or when the round result is shown.
+            // While status is 'failed', the same option remains selectable so the
+            // player can hit it again (or pick a different one) after a network drop.
+            const disabled = showResult || (!!selected && myAnswerStatus !== 'failed');
             return (
               <button key={key}
                 onClick={() => handleAnswer(key)}
-                disabled={!!selected || showResult}
+                disabled={disabled}
                 className="w-full p-4 rounded-xl text-left transition-all"
                 style={style}>
                 <div className="flex items-center gap-3">
@@ -208,6 +272,8 @@ function TournamentMatch({
                   <span className="text-white font-medium flex-1">{text}</span>
                   {showResult && key === correctKey && <CheckCircle2 className="w-5 h-5 text-green-400" />}
                   {showResult && key === selected && key !== correctKey && <XCircle className="w-5 h-5 text-red-400" />}
+                  {!showResult && key === selected && myAnswerStatus === 'accepted' && <CheckCircle2 className="w-5 h-5 text-green-400" />}
+                  {!showResult && key === selected && myAnswerStatus === 'pending' && <Loader2 className="w-5 h-5 text-amber-300 animate-spin" />}
                 </div>
               </button>
             );
@@ -849,6 +915,8 @@ export default function TournamentScreen() {
         bothCorrectFeedback={tournament.bothCorrectFeedback}
         onAnswered={submitTournamentAnswer}
         questionTime={tournament.questionTime}
+        myAnswerStatus={tournament.myAnswerStatus}
+        onRetryAnswer={submitTournamentAnswer}
       />
     );
   }

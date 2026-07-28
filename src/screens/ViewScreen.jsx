@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { Trophy, Zap, Crown, Flame, Users, Swords, Timer, Star, TrendingUp, Activity, Radio } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { BASE_URL as SOCKET_URL } from '../utils/api';
@@ -144,7 +144,11 @@ function MergeToast({ p1, p2, onDone }) {
 }
 
 // ─── VS Match Card ────────────────────────────────────────────────────────────
-function MatchCard({ match, index }) {
+// Memoized: at 200 concurrent matches, ViewScreen re-renders on every socket
+// event (leaderboard tick, activity feed, match_update, etc.). React.memo
+// with the default shallow equality on { match, index } means an individual
+// MatchCard only re-renders when THAT match's data actually changes.
+const MatchCard = memo(function MatchCard({ match, index }) {
   const [pulse, setPulse] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const startedAt = useRef(Date.now());
@@ -308,10 +312,13 @@ function MatchCard({ match, index }) {
       </div>
     </div>
   );
-}
+});
 
 // ─── Leaderboard Panel ────────────────────────────────────────────────────────
-function LeaderboardPanel({ players }) {
+// Memoized: re-renders only when the players array reference changes.
+// The server already sends a fresh array on leaderboard_update, so this is
+// the correct granularity — the panel doesn't recompute on unrelated events.
+const LeaderboardPanel = memo(function LeaderboardPanel({ players }) {
   const sorted = [...players].sort((a, b) => (b.wins || 0) - (a.wins || 0));
   const top3 = sorted.slice(0, 3);
   const rest = sorted.slice(3, 10);
@@ -397,7 +404,7 @@ function LeaderboardPanel({ players }) {
       </div>
     </div>
   );
-}
+});
 
 // ─── Live Commentary Ticker ───────────────────────────────────────────────────
 const TICKER_MESSAGES = [
@@ -464,7 +471,9 @@ function LiveTicker({ messages }) {
 }
 
 // ─── Activity Feed (combined evictions + merges + joins) ─────────────────────
-function ActivityFeed({ activities }) {
+// Memoized: only re-renders when the activities array reference changes (or
+// its own internal 1s timestamp tick — that's local and unaffected by memo).
+const ActivityFeed = memo(function ActivityFeed({ activities }) {
   const [, forceUpdate] = useState(0);
 
   // Force re-render every second to update "Xs ago" timestamps
@@ -560,7 +569,7 @@ function ActivityFeed({ activities }) {
       </div>
     </div>
   );
-}
+});
 
 // ─── Crowd Hype Burst ─────────────────────────────────────────────────────────
 function HypeBurst({ active }) {

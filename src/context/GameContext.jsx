@@ -1,4 +1,4 @@
-import { createContext, useContext, useReducer, useCallback, useEffect, useRef } from 'react';
+import { createContext, useContext, useReducer, useCallback, useEffect, useRef, useMemo } from 'react';
 import { getRandomQuestions, getSeededQuestions } from '../data/questions';
 import {
   getDeviceId, registerUsername, releaseUsername,
@@ -15,6 +15,12 @@ function pickQuestions(count, excludeIds, seed) {
   return seed ? getSeededQuestions(count, excludeIds, seed) : getRandomQuestions(count, excludeIds);
 }
 
+// Split contexts so components that only need to DISPATCH don't re-render on
+// every state change. Legacy consumers of useGame() still get the merged
+// view (backwards compat), but new consumers can opt into either slice.
+const GameStateContext = createContext(null);
+const GameActionsContext = createContext(null);
+// Legacy merged context — kept for useGame() consumers already in the codebase.
 const GameContext = createContext(null);
 
 // ─── State Shape ──────────────────────────────────────────────────────────────
@@ -1239,29 +1245,71 @@ export function GameProvider({ children }) {
     dispatch({ type: ACTIONS.SET_STAGE, payload: stage });
   }, []);
 
+  // Actions bundle — identity-stable across state changes because every
+  // action is wrapped in useCallback. Memoize the wrapper so consumers of
+  // useGameActions() (or the merged useGame()) don't re-render when state
+  // changes but actions haven't.
+  const actions = useMemo(() => ({
+    dispatch,
+    joinLobby,
+    simulateOpponentAnswer,
+    submitAnswer,
+    submitTournamentAnswer,
+    evaluateRound,
+    enterFinal,
+    submitFinalAnswer,
+    goToLeaderboard,
+    resetGame,
+    setStage,
+    ACTIONS,
+  }), [
+    dispatch, joinLobby, simulateOpponentAnswer, submitAnswer,
+    submitTournamentAnswer, evaluateRound, enterFinal, submitFinalAnswer,
+    goToLeaderboard, resetGame, setStage,
+  ]);
+
+  // Legacy merged view for backwards-compat useGame() consumers. The merged
+  // object identity IS unstable (recreated when state changes) — that's why
+  // useGameState() + useGameActions() are the new preferred hooks for any
+  // heavy tree that renders often.
+  const mergedForLegacy = useMemo(
+    () => ({ state, ...actions }),
+    [state, actions]
+  );
+
   return (
-    <GameContext.Provider value={{
-      state,
-      dispatch,
-      joinLobby,
-      simulateOpponentAnswer,
-      submitAnswer,
-      submitTournamentAnswer,
-      evaluateRound,
-      enterFinal,
-      submitFinalAnswer,
-      goToLeaderboard,
-      resetGame,
-      setStage,
-      ACTIONS,
-    }}>
-      {children}
-    </GameContext.Provider>
+    <GameActionsContext.Provider value={actions}>
+      <GameStateContext.Provider value={state}>
+        <GameContext.Provider value={mergedForLegacy}>
+          {children}
+        </GameContext.Provider>
+      </GameStateContext.Provider>
+    </GameActionsContext.Provider>
   );
 }
 
+// Legacy — merged state + actions. Kept working; still triggers re-renders
+// on every state change. Prefer the split hooks below for new components.
 export function useGame() {
   const ctx = useContext(GameContext);
   if (!ctx) throw new Error('useGame must be used inside GameProvider');
+  return ctx;
+}
+
+// Preferred — subscribe only to the state slice you actually read.
+// Re-renders when state changes (same behavior as useGame's `state` today,
+// but without pulling in the actions object).
+export function useGameState() {
+  const ctx = useContext(GameStateContext);
+  if (ctx === null) throw new Error('useGameState must be used inside GameProvider');
+  return ctx;
+}
+
+// Preferred — subscribe only to actions. Never re-renders on state changes.
+// Use in components that only DISPATCH (buttons, form submit handlers, etc.)
+// so a socket event doesn't force them to re-render.
+export function useGameActions() {
+  const ctx = useContext(GameActionsContext);
+  if (!ctx) throw new Error('useGameActions must be used inside GameProvider');
   return ctx;
 }
