@@ -445,7 +445,18 @@ function gameReducer(state, action) {
       };
 
     case ACTIONS.TOURNAMENT_SUBMIT_ANSWER:
-      return { ...state, tournament: { ...state.tournament, myAnswer: action.payload.answer } };
+      // status: 'pending' | 'accepted' | 'failed' — drives the button state
+      // (spinner, checkmark, retry chip) so a dropped ack never looks like a
+      // silent hang.
+      return {
+        ...state,
+        tournament: {
+          ...state.tournament,
+          myAnswer: action.payload.answer,
+          myAnswerStatus: action.payload.status || state.tournament.myAnswerStatus || null,
+          myAnswerFailReason: action.payload.reason || null,
+        },
+      };
 
     case ACTIONS.TOURNAMENT_ROUND_RESULT:
       return { ...state, tournament: { ...state.tournament, roundResult: action.payload, bothCorrectFeedback: false } };
@@ -873,7 +884,17 @@ export function GameProvider({ children }) {
     socket.on('tournament_countdown',   onTournamentCountdown);
     socket.on('tournament_grace_period', onTournamentGracePeriod);
     socket.on('tournament_started',     onTournamentStartedFull);
-    socket.on('match_found',            (data) => { if (data.isTournament) onTournamentMatchFound(data); else onMatchFound(data); });
+    // match_found: ack the server so it knows we've buffered the questions.
+    // If the ack never lands the server logs a drop (see emitWithAck in server.js).
+    socket.on('match_found', (data, ack) => {
+      try {
+        if (data.isTournament) onTournamentMatchFound(data); else onMatchFound(data);
+        if (typeof ack === 'function') ack({ ok: true, receivedAt: Date.now() });
+      } catch (err) {
+        console.error('[socket] match_found handler threw:', err);
+        if (typeof ack === 'function') ack({ ok: false, error: String(err?.message || err) });
+      }
+    });
     socket.on('round_result',           (data) => { if (data.isTournament) onTournamentRoundResult(data); else onRoundResult(data); });
     socket.on('tournament_bye',         onTournamentBye);
     socket.on('tournament_round_won',   onTournamentRoundWon);
@@ -884,11 +905,12 @@ export function GameProvider({ children }) {
       dispatch({ type: ACTIONS.TOURNAMENT_FINAL_NOTICE, payload: { message } });
     });
     // Server-driven transition: server emits this at the exact moment the
-    // first question should appear. This is the authoritative signal — much
-    // more reliable than any client-side setTimeout for long (3-min) waits.
-    socket.on('match_start_now', ({ matchId }) => {
-      console.log('[TOURNAMENT] match_start_now:', { matchId });
+    // first question should appear. Client acks so the server knows the
+    // question is actually on screen before starting its 7-second countdown.
+    socket.on('match_start_now', ({ matchId, startAt, questionTime }, ack) => {
+      console.log('[TOURNAMENT] match_start_now:', { matchId, startAt, questionTime });
       dispatch({ type: 'TOURNAMENT_MATCH_START' });
+      if (typeof ack === 'function') ack({ ok: true, receivedAt: Date.now() });
     });
     socket.on('tournament_champion',    onTournamentChampion);
     socket.on('you_are_champion',       onYouAreChampion);
@@ -1158,17 +1180,54 @@ export function GameProvider({ children }) {
 
   const submitTournamentAnswer = useCallback((answer, questionId, matchId, timeLeft) => {
     const deviceId = getDeviceId();
-    console.log('[TOURNAMENT] submitAnswer:', { answer, questionId, matchId, timeLeft, deviceId });
-    dispatch({ type: ACTIONS.TOURNAMENT_SUBMIT_ANSWER, payload: { answer } });
-    socket.emit('submit_answer', {
+    // Deterministic clientMsgId: retries of the SAME logical submit dedupe
+    // to a single accepted answer on the server. Includes questionId so a
+    // fresh question resets uniqueness.
+    const clientMsgId = `${matchId}:${questionId}:${deviceId}`;
+    console.log('[TOURNAMENT] submitAnswer:', { answer, questionId, matchId, timeLeft, deviceId, clientMsgId });
+
+    // Optimistic local update — the button flips to "selected + pending" state.
+    dispatch({ type: ACTIONS.TOURNAMENT_SUBMIT_ANSWER, payload: { answer, status: 'pending' } });
+
+    const payload = {
       answer,
       questionId,
       matchId,
       deviceId,
       timeLeft: timeLeft ?? 0,
       clientTimestamp: Date.now(),
+      clientMsgId,
       isTournament: true,
-    });
+    };
+
+    // Retry up to 3× on timeout. Idempotent server means duplicates re-ack
+    // with the same result, so a spurious retry never corrupts state.
+    const tryOnce = async (attempt = 1) => {
+      try {
+        const res = await socket.timeout(1500).emitWithAck('submit_answer', payload);
+        if (res && res.ok) {
+          dispatch({ type: ACTIONS.TOURNAMENT_SUBMIT_ANSWER, payload: { answer: res.acceptedAnswer, status: 'accepted' } });
+          return;
+        }
+        // Server said no — surface the specific reason.
+        if (res && res.code === 'already_answered') {
+          // Benign — server had our previous answer; reflect it back locally.
+          dispatch({ type: ACTIONS.TOURNAMENT_SUBMIT_ANSWER, payload: { answer: res.acceptedAnswer, status: 'accepted' } });
+          return;
+        }
+        if (res && (res.code === 'match_gone' || res.code === 'stale_question')) {
+          // Match moved on — nothing more to do, next question will render.
+          console.warn('[TOURNAMENT] submit_answer superseded:', res);
+          return;
+        }
+        if (attempt < 3) return tryOnce(attempt + 1);
+        dispatch({ type: ACTIONS.TOURNAMENT_SUBMIT_ANSWER, payload: { answer, status: 'failed', reason: res?.code || 'unknown' } });
+      } catch (_) {
+        if (attempt < 3) return tryOnce(attempt + 1);
+        dispatch({ type: ACTIONS.TOURNAMENT_SUBMIT_ANSWER, payload: { answer, status: 'failed', reason: 'timeout' } });
+      }
+    };
+    tryOnce();
   }, []);
 
   const resetGame = useCallback(() => {
